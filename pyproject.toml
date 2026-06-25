@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ld6002c-fall-detection"
+version = "0.1.0"
+description = "Teaching project for HLK-LD6002C millimeter-wave fall detection with mock and serial modes."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "LD6002C Fall Detection Course" }
+]
+dependencies = [
+  "pyserial>=3.5",
+  "pandas>=2.0",
+  "streamlit>=1.30"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0"
+]
+
+[project.scripts]
+ld6002c-fall = "ld6002c_fall.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
