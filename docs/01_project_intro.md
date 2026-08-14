@@ -1,28 +1,29 @@
 # 01 项目背景和系统架构
 
-本项目面向老人跌倒检测课程实践，目标是使用 HiLink HLK-LD6002C 60GHz 毫米波雷达获取人体存在、运动和跌倒相关信息，并在 Python 中实现二次判断、日志记录、报警和可视化。
-
-第一版不依赖真实设备，使用 mock 模式提前完成软件链路。这样可以把课程重点放在系统架构、状态机设计和测试方法上。
-
-## 系统架构
+本项目用于讲解毫米波雷达、串口协议、Python 状态机、日志、WebSocket 和嵌入式终端如何组成一套可测试的跌倒报警系统。核心判断保留在 Python，StickS3 不直接解释雷达数据。
 
 ```text
-雷达数据源
-  ├── mock_reader.py：模拟数据
-  └── serial_reader.py：真实串口数据
-        ↓
-ld6002c_parser.py：协议解析扩展点
-        ↓
-RadarFrame：统一数据结构
-        ↓
-fall_detector.py：Python 二次判断状态机
-        ↓
-CSV 日志 / 控制台报警 / Streamlit 页面
+mock / serial / replay
+         |
+         v
+     RadarFrame
+         |
+         v
+    FallDetector
+         |
+         +--> frame CSV / event CSV / Streamlit
+         |
+         +--> WebSocket --> StickS3 显示、声音、按键
 ```
 
-## 第一版目标
+模块边界：
 
-- 没有设备也能运行。
-- 不猜测真实串口协议。
-- 状态机逻辑独立，方便讲解和测试。
-- 后续只需要补充协议解析即可接入真实 LD6002C。
+- Reader 只负责取得 bytes 或模拟数据。
+- `LD6002CParser` 只负责官方 TinyFrame 到 `RadarFrame` 的转换。
+- `FallDetector` 只负责持续时间与报警冷却。
+- `SystemController` 负责设备状态、业务事件和人工取消。
+- StickS3 只接收 JSON 状态并返回人工事件。
+
+这种分层让无硬件测试、原始数据回放和真机联调使用同一套判断逻辑。
+
+`mock` 模式只用于演示和测试，不代表真实雷达观测。默认 `empty` 场景用于验证系统启动后不自动报警；`fall-demo`、`normal` 和 `presence-demo` 分别用于跌倒流程、正常有人和人体存在切换演示。真实硬件到位后，现场状态应以 `serial` 模式解析出的 LD6002C 帧为准。

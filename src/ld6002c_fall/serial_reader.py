@@ -39,6 +39,10 @@ class SerialRadarReader:
     def read(self) -> RadarFrame | None:
         """Read available serial bytes and return a parsed frame when possible."""
 
+        buffered_frame = self.parser.feed(b"")
+        if buffered_frame is not None:
+            return buffered_frame
+
         try:
             waiting = self._serial.in_waiting
             data = self._serial.read(waiting or 1)

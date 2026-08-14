@@ -23,3 +23,11 @@ dist/
 
 data/*.csv
 !data/.gitkeep
+data/raw/*.bin
+data/raw/*.json
+!data/raw/.gitkeep
+
+firmware/sticks3_alarm/include/secrets.h
+firmware/**/.pio/
+
+tmp/
