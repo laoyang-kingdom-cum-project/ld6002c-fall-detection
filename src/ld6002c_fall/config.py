@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,10 +13,30 @@ DEFAULT_BAUDRATE = 115200
 DEFAULT_SUSPECT_SECONDS = 2.0
 DEFAULT_CONFIRM_SECONDS = 5.0
 DEFAULT_ALARM_COOLDOWN = 30.0
+DEFAULT_ALARM_SOUND_PATH = Path(
+    os.getenv("ALARM_SOUND_PATH", "studio_video_1778294323944.mp3")
+)
+DEFAULT_ALARM_VOLUME = int(os.getenv("ALARM_VOLUME", "100"))
+DEFAULT_AUDIO_ALARM_ENABLED = os.getenv("AUDIO_ALARM_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 DEFAULT_WEBSOCKET_HOST = "0.0.0.0"
 DEFAULT_WEBSOCKET_PORT = 8765
 DEFAULT_REPLAY_CHUNK_SIZE = 64
 DEFAULT_REPLAY_INTERVAL = 0.05
+DEFAULT_OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:0.6b")
+DEFAULT_OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "10"))
+DEFAULT_AI_PERIODIC_INTERVAL = float(os.getenv("AI_PERIODIC_INTERVAL", "3.0"))
+DEFAULT_AI_ENABLED = os.getenv("AI_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 @dataclass(frozen=True)

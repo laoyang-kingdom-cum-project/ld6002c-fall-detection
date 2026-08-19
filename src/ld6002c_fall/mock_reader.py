@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import math
 from typing import Literal
 
-from .radar_model import RadarFrame
+from .radar_model import RadarFrame, RadarPoint
 
 MockScenario = Literal["empty", "normal", "fall-demo", "presence-demo"]
 MOCK_SCENARIOS: tuple[MockScenario, ...] = (
@@ -54,6 +55,11 @@ class MockRadarReader:
         human_present, fall_detected, motion_state = self._state_for_elapsed(
             elapsed_seconds
         )
+        points = self._points_for_elapsed(
+            elapsed_seconds,
+            human_present=human_present,
+            fall_detected=fall_detected,
+        )
 
         frame = RadarFrame(
             timestamp=timestamp,
@@ -64,6 +70,7 @@ class MockRadarReader:
                 f"mock:scenario={self.scenario};index={self._frame_index};"
                 f"elapsed={elapsed_seconds:.1f}"
             ),
+            points=points,
         )
         self._frame_index += 1
         return frame
@@ -85,3 +92,37 @@ class MockRadarReader:
             return human_present, False, "moving" if human_present else "none"
 
         raise RuntimeError(f"unsupported mock scenario: {self.scenario}")
+
+    @staticmethod
+    def _points_for_elapsed(
+        elapsed_seconds: float,
+        *,
+        human_present: bool,
+        fall_detected: bool,
+    ) -> tuple[RadarPoint, ...]:
+        """Build a deterministic teaching trajectory, clearly marked as mock."""
+
+        if not human_present:
+            return ()
+
+        center_x = 0.28 * math.sin(elapsed_seconds * 0.35)
+        center_y = 1.25 + 0.10 * math.cos(elapsed_seconds * 0.25)
+        if fall_detected:
+            x_offsets = (-0.72, -0.48, -0.24, 0.0, 0.24, 0.48, 0.72)
+            z_values = (0.28, 0.30, 0.32, 0.34, 0.32, 0.30, 0.28)
+            speed = 0.02
+        else:
+            x_offsets = (-0.06, 0.04, -0.05, 0.05, -0.04, 0.03, 0.0)
+            z_values = (0.28, 0.52, 0.78, 1.04, 1.30, 1.55, 1.76)
+            speed = 0.18
+
+        return tuple(
+            RadarPoint(
+                cluster_id=1,
+                x=center_x + x_offset,
+                y=center_y + 0.025 * math.sin(index + elapsed_seconds * 0.2),
+                z=z,
+                speed=speed,
+            )
+            for index, (x_offset, z) in enumerate(zip(x_offsets, z_values, strict=True))
+        )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .ld6002c_parser import LD6002CParser
+from .ld6002c_parser import LD6002CParser, build_user_log_command
 from .radar_model import RadarFrame
 
 try:
@@ -52,6 +52,21 @@ class SerialRadarReader:
         if not data:
             return None
         return self.parser.feed(data)
+
+    def set_user_log(self, enabled: bool) -> None:
+        """Ask the radar to start or stop documented User log reports."""
+
+        command = build_user_log_command(enabled)
+        try:
+            written = self._serial.write(command)
+            self._serial.flush()
+        except SerialException as exc:
+            action = "enable" if enabled else "disable"
+            raise RuntimeError(f"Failed to {action} LD6002C User log: {exc}") from exc
+        if written != len(command):
+            raise RuntimeError(
+                f"Incomplete LD6002C command write: {written}/{len(command)} bytes"
+            )
 
     def close(self) -> None:
         """Close the serial port."""

@@ -7,6 +7,17 @@ from datetime import datetime
 
 
 @dataclass(frozen=True)
+class RadarPoint:
+    """One point from the LD6002C 3D point-cloud report."""
+
+    cluster_id: int
+    x: float
+    y: float
+    z: float
+    speed: float
+
+
+@dataclass(frozen=True)
 class RadarFrame:
     """One normalized radar observation.
 
@@ -19,3 +30,4 @@ class RadarFrame:
     fall_detected: bool
     motion_state: str
     raw: str
+    points: tuple[RadarPoint, ...] = ()

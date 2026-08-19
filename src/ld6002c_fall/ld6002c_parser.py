@@ -5,9 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from functools import reduce
+import math
 from operator import xor
+import struct
 
-from .radar_model import RadarFrame
+from .radar_model import RadarFrame, RadarPoint
 
 
 SOF = 0x01
@@ -15,7 +17,10 @@ HEADER_SIZE = 8
 MAX_DATA_LENGTH = 1024
 FALL_STATUS_TYPE = 0x0E02
 HUMAN_STATUS_TYPE = 0x0F09
-STATUS_MESSAGE_TYPES = {FALL_STATUS_TYPE, HUMAN_STATUS_TYPE}
+POINT_CLOUD_TYPE = 0x0A08
+USER_LOG_TYPE = 0x010E
+NORMALIZED_MESSAGE_TYPES = {FALL_STATUS_TYPE, HUMAN_STATUS_TYPE, POINT_CLOUD_TYPE}
+POINT_RECORD_SIZE = 20
 
 
 class LD6002CProtocolError(ValueError):
@@ -27,9 +32,8 @@ class LD6002CParser:
 
     The radar sends TinyFrame messages. Header fields use big-endian byte
     order, while payload fields use little-endian byte order. This parser
-    currently normalizes the two one-byte status reports needed by the course
-    project and safely skips other validated message types such as point cloud
-    data.
+    normalizes the two one-byte status reports and the documented 0x0A08 3D
+    point-cloud report. Other validated message types are safely skipped.
     """
 
     def __init__(self, clock: Callable[[], datetime] | None = None) -> None:
@@ -56,7 +60,7 @@ class LD6002CParser:
                 return None
 
             message_type = int.from_bytes(frame[5:7], byteorder="big")
-            if message_type not in STATUS_MESSAGE_TYPES:
+            if message_type not in NORMALIZED_MESSAGE_TYPES:
                 continue
 
             try:
@@ -76,9 +80,16 @@ class LD6002CParser:
         self._fall_status_seen = False
 
     def parse_frame(self, frame: bytes) -> RadarFrame:
-        """Convert one validated fall or presence report into a RadarFrame."""
+        """Convert one validated status or point-cloud report into a frame."""
 
         data_length, message_type, data = self._validate_frame(frame)
+        if message_type == POINT_CLOUD_TYPE:
+            return self._normalized_frame(frame, points=self._parse_point_cloud(data))
+
+        if message_type not in {FALL_STATUS_TYPE, HUMAN_STATUS_TYPE}:
+            raise LD6002CProtocolError(
+                f"message type 0x{message_type:04X} is not normalized"
+            )
         if data_length != 1:
             raise LD6002CProtocolError(
                 f"status message 0x{message_type:04X} must contain one data byte"
@@ -96,18 +107,49 @@ class LD6002CParser:
         elif message_type == HUMAN_STATUS_TYPE:
             self._human_present = bool(status)
             self._human_status_seen = True
-        else:
-            raise LD6002CProtocolError(
-                f"message type 0x{message_type:04X} is not a normalized status report"
-            )
+        return self._normalized_frame(frame)
 
+    def _normalized_frame(
+        self,
+        frame: bytes,
+        *,
+        points: tuple[RadarPoint, ...] = (),
+    ) -> RadarFrame:
         return RadarFrame(
             timestamp=self._clock(),
             human_present=self._human_present,
             fall_detected=self._fall_detected,
             motion_state="unknown",
             raw=frame.hex(" "),
+            points=points,
         )
+
+    @staticmethod
+    def _parse_point_cloud(data: bytes) -> tuple[RadarPoint, ...]:
+        """Parse the official target-count plus repeated point layout."""
+
+        if len(data) < 4:
+            raise LD6002CProtocolError("point-cloud message is missing target_num")
+
+        target_count = struct.unpack_from("<i", data)[0]
+        if target_count < 0:
+            raise LD6002CProtocolError("point-cloud target_num cannot be negative")
+
+        expected_length = 4 + target_count * POINT_RECORD_SIZE
+        if len(data) != expected_length:
+            raise LD6002CProtocolError(
+                "point-cloud payload length does not match target_num: "
+                f"got {len(data)}, expected {expected_length}"
+            )
+
+        points = []
+        for index in range(target_count):
+            offset = 4 + index * POINT_RECORD_SIZE
+            cluster_id, x, y, z, speed = struct.unpack_from("<iffff", data, offset)
+            if not all(math.isfinite(value) for value in (x, y, z, speed)):
+                raise LD6002CProtocolError("point-cloud coordinates must be finite")
+            points.append(RadarPoint(cluster_id, x, y, z, speed))
+        return tuple(points)
 
     def _extract_frame(self) -> bytes | None:
         while self.buffer:
@@ -174,3 +216,30 @@ def _checksum(data: bytes) -> int:
     """Return the protocol checksum: bitwise NOT of the XOR of all bytes."""
 
     return (~reduce(xor, data, 0)) & 0xFF
+
+
+def build_tinyframe(message_type: int, data: bytes, *, frame_id: int = 0) -> bytes:
+    """Encode one documented TinyFrame command for the radar."""
+
+    if not 0 <= frame_id <= 0xFFFF:
+        raise ValueError("frame_id must fit in uint16")
+    if not 0 <= message_type <= 0xFFFF:
+        raise ValueError("message_type must fit in uint16")
+    if len(data) > MAX_DATA_LENGTH:
+        raise ValueError("data length exceeds the protocol limit")
+
+    header = (
+        bytes([SOF])
+        + frame_id.to_bytes(2, byteorder="big")
+        + len(data).to_bytes(2, byteorder="big")
+        + message_type.to_bytes(2, byteorder="big")
+    )
+    frame = header + bytes([_checksum(header)]) + data
+    return frame + (bytes([_checksum(data)]) if data else b"")
+
+
+def build_user_log_command(enabled: bool, *, frame_id: int = 0) -> bytes:
+    """Build official 0x010E command controlling active User log reports."""
+
+    value = int(enabled).to_bytes(4, byteorder="little")
+    return build_tinyframe(USER_LOG_TYPE, value, frame_id=frame_id)

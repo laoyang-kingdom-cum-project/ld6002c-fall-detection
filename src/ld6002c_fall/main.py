@@ -3,19 +3,36 @@
 from __future__ import annotations
 
 import argparse
+import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
-from .alarm import ConsoleAlarm
+from .ai import (
+    AIInferenceScheduler,
+    AITrigger,
+    FallAIRequest,
+    FallAIResult,
+    OllamaFallAI,
+)
+from .ai.ollama_client import disabled_ai_result
+from .alarm import AlarmOutput, ConsoleAlarm, DesktopAudioAlarm
 from .config import (
+    DEFAULT_AI_ENABLED,
+    DEFAULT_AI_PERIODIC_INTERVAL,
     DEFAULT_ALARM_COOLDOWN,
+    DEFAULT_ALARM_SOUND_PATH,
+    DEFAULT_ALARM_VOLUME,
+    DEFAULT_AUDIO_ALARM_ENABLED,
     DEFAULT_BAUDRATE,
     DEFAULT_CONFIRM_SECONDS,
     DEFAULT_EVENT_LOG_PATH,
     DEFAULT_LOG_PATH,
+    DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_TIMEOUT,
     DEFAULT_REPLAY_CHUNK_SIZE,
     DEFAULT_REPLAY_INTERVAL,
     DEFAULT_SUSPECT_SECONDS,
@@ -40,8 +57,10 @@ class RuntimeServices:
     detector: FallDetector
     frame_logger: CSVFrameLogger
     event_logger: CSVEventLogger
-    alarm: ConsoleAlarm
+    alarm: AlarmOutput
     controller: SystemController
+    ai: OllamaFallAI | None = None
+    ai_scheduler: AIInferenceScheduler | None = None
     device_server: DeviceWebSocketServer | None = None
 
 
@@ -61,6 +80,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--port", help="串口名称，例如 /dev/ttyUSB0 或 COM3")
     parser.add_argument("--baudrate", type=int, default=DEFAULT_BAUDRATE, help="串口波特率")
+    point_cloud_group = parser.add_mutually_exclusive_group()
+    point_cloud_group.add_argument(
+        "--enable-point-cloud",
+        dest="point_cloud_enabled",
+        action="store_true",
+        help="serial 模式启动时发送 0x010E，开启真实 3D 点云上报（默认）",
+    )
+    point_cloud_group.add_argument(
+        "--disable-point-cloud",
+        dest="point_cloud_enabled",
+        action="store_false",
+        help="serial 模式不发送 0x010E 点云上报命令",
+    )
+    parser.set_defaults(point_cloud_enabled=True)
     parser.add_argument("--input", type=Path, help="replay 模式的原始 .bin 文件")
     parser.add_argument(
         "--replay-chunk-size",
@@ -104,6 +137,32 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_ALARM_COOLDOWN,
         help="确认跌倒后的报警冷却秒数",
     )
+    audio_group = parser.add_mutually_exclusive_group()
+    audio_group.add_argument(
+        "--enable-audio-alarm",
+        dest="audio_alarm_enabled",
+        action="store_true",
+        help="确认跌倒时在电脑播放本地报警音（默认）",
+    )
+    audio_group.add_argument(
+        "--disable-audio-alarm",
+        dest="audio_alarm_enabled",
+        action="store_false",
+        help="禁用电脑声音，仅保留控制台报警",
+    )
+    parser.set_defaults(audio_alarm_enabled=DEFAULT_AUDIO_ALARM_ENABLED)
+    parser.add_argument(
+        "--alarm-sound",
+        type=Path,
+        default=DEFAULT_ALARM_SOUND_PATH,
+        help="电脑报警音频文件路径",
+    )
+    parser.add_argument(
+        "--alarm-volume",
+        type=int,
+        default=DEFAULT_ALARM_VOLUME,
+        help="电脑播放音量，范围 0-100",
+    )
     parser.add_argument(
         "--websocket-host",
         default=DEFAULT_WEBSOCKET_HOST,
@@ -115,10 +174,55 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_WEBSOCKET_PORT,
         help="StickS3 WebSocket 监听端口",
     )
-    parser.add_argument(
+    websocket_group = parser.add_mutually_exclusive_group()
+    websocket_group.add_argument(
+        "--enable-websocket",
+        dest="disable_websocket",
+        action="store_false",
+        help="启用旧 StickS3 WebSocket 兼容服务",
+    )
+    websocket_group.add_argument(
         "--disable-websocket",
+        dest="disable_websocket",
         action="store_true",
-        help="禁用 StickS3 WebSocket 服务",
+        help="禁用旧 StickS3 WebSocket 服务（默认）",
+    )
+    parser.set_defaults(disable_websocket=True)
+    ai_group = parser.add_mutually_exclusive_group()
+    ai_group.add_argument(
+        "--enable-ai",
+        dest="ai_enabled",
+        action="store_true",
+        help="启用本地 Ollama AI 判断层",
+    )
+    ai_group.add_argument(
+        "--disable-ai",
+        dest="ai_enabled",
+        action="store_false",
+        help="禁用 AI，直接使用雷达原始跌倒结果",
+    )
+    parser.set_defaults(ai_enabled=DEFAULT_AI_ENABLED)
+    parser.add_argument(
+        "--ollama-base-url",
+        default=DEFAULT_OLLAMA_BASE_URL,
+        help="Ollama API 地址",
+    )
+    parser.add_argument(
+        "--ollama-model",
+        default=DEFAULT_OLLAMA_MODEL,
+        help="本地 Ollama 模型名称",
+    )
+    parser.add_argument(
+        "--ollama-timeout",
+        type=float,
+        default=DEFAULT_OLLAMA_TIMEOUT,
+        help="Ollama 请求超时秒数",
+    )
+    parser.add_argument(
+        "--ai-periodic-interval",
+        type=float,
+        default=DEFAULT_AI_PERIODIC_INTERVAL,
+        help="输入不变时重新请求 AI 的周期秒数",
     )
     return parser
 
@@ -136,7 +240,28 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise SystemExit("--replay-interval 不能小于 0")
     if not 1 <= args.websocket_port <= 65535:
         raise SystemExit("--websocket-port 必须在 1 到 65535 之间")
+    if args.ollama_timeout <= 0:
+        raise SystemExit("--ollama-timeout 必须大于 0")
+    if args.ai_periodic_interval <= 0:
+        raise SystemExit("--ai-periodic-interval 必须大于 0")
+    if not 0 <= args.alarm_volume <= 100:
+        raise SystemExit("--alarm-volume 必须在 0 到 100 之间")
 
+    ai = (
+        OllamaFallAI(
+            base_url=args.ollama_base_url,
+            model=args.ollama_model,
+            timeout=args.ollama_timeout,
+        )
+        if args.ai_enabled
+        else None
+    )
+
+    alarm: AlarmOutput = (
+        DesktopAudioAlarm(args.alarm_sound, volume=args.alarm_volume)
+        if args.audio_alarm_enabled
+        else ConsoleAlarm()
+    )
     runtime = RuntimeServices(
         detector=FallDetector(
             suspect_seconds=args.suspect_seconds,
@@ -145,8 +270,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
         frame_logger=CSVFrameLogger(args.log_path),
         event_logger=CSVEventLogger(args.event_log_path),
-        alarm=ConsoleAlarm(),
+        alarm=alarm,
         controller=SystemController(),
+        ai=ai,
+        ai_scheduler=(
+            AIInferenceScheduler(args.ai_periodic_interval)
+            if ai is not None
+            else None
+        ),
     )
 
     if not args.disable_websocket:
@@ -158,6 +289,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     print("老人跌倒检测系统启动")
     print(f"当前模式：{args.mode}")
+    _print_alarm_startup_status(alarm)
+    _print_ai_startup_status(ai, args.ollama_model, args.ai_periodic_interval)
 
     try:
         if runtime.device_server is not None:
@@ -168,7 +301,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         if args.mode == "mock":
             _run_mock(runtime, args.mock_scenario)
         elif args.mode == "serial":
-            _run_serial(args.port, args.baudrate, runtime)
+            _run_serial(
+                args.port,
+                args.baudrate,
+                runtime,
+                point_cloud_enabled=args.point_cloud_enabled,
+            )
         else:
             _run_replay(
                 args.input,
@@ -183,6 +321,20 @@ def main(argv: Sequence[str] | None = None) -> None:
     finally:
         if runtime.device_server is not None:
             runtime.device_server.stop()
+        runtime.alarm.close()
+
+
+def _print_alarm_startup_status(alarm: AlarmOutput) -> None:
+    if not isinstance(alarm, DesktopAudioAlarm):
+        print("[Alarm] 电脑语音：已禁用（仅控制台）")
+        return
+    if alarm.ready:
+        print(f"[Alarm] 电脑语音：{alarm.sound_path} (音量 {alarm.volume}%)")
+        return
+    if not alarm.sound_path.is_file():
+        print(f"[Alarm] 音频文件不存在：{alarm.sound_path}")
+    else:
+        print("[Alarm] 未找到 ffplay，仅保留控制台报警")
 
 
 def _build_device_server(
@@ -237,8 +389,15 @@ def _run_serial(
     port: str,
     baudrate: int,
     runtime: RuntimeServices,
+    *,
+    point_cloud_enabled: bool,
 ) -> None:
     with SerialRadarReader(port=port, baudrate=baudrate) as reader:
+        if point_cloud_enabled:
+            reader.set_user_log(True)
+            print("[Radar] 已发送 0x010E，等待 LD6002C 真实 3D 点云")
+        else:
+            print("[Radar] 未开启 User log，Dashboard 点云区将保持 WAITING")
         while True:
             frame = reader.read()
             if frame is None:
@@ -271,9 +430,90 @@ def _process_frame(
     runtime: RuntimeServices,
     source: str,
 ) -> None:
-    detection = runtime.detector.update(frame)
-    result = runtime.controller.process(frame, detection, source)
-    runtime.frame_logger.log(frame, detection.state, source)
+    radar_is_fall = int(frame.fall_detected)
+    ai_trigger: AITrigger | str = "disabled"
+    did_request = False
+    if runtime.ai is not None and runtime.ai_scheduler is not None:
+        requested_trigger = runtime.ai_scheduler.next_trigger(
+            radar_is_fall,
+            frame.timestamp,
+        )
+        if requested_trigger is None:
+            ai_trigger = "cached"
+            ai_result = runtime.ai_scheduler.cached_result()
+        else:
+            ai_trigger = requested_trigger
+            did_request = True
+            _log_ai_event(
+                runtime,
+                frame,
+                source,
+                "AI_REQUEST",
+                {
+                    "is_fall": radar_is_fall,
+                    "trigger": requested_trigger,
+                    "model": runtime.ai.model,
+                },
+            )
+            ai_result = runtime.ai.predict(FallAIRequest(radar_is_fall), force=True)
+            runtime.ai_scheduler.remember(
+                ai_result,
+                completed_at=datetime.now(tz=frame.timestamp.tzinfo),
+            )
+            if ai_result.success:
+                _log_ai_event(
+                    runtime,
+                    frame,
+                    source,
+                    "AI_RESPONSE",
+                    {
+                        "result": ai_result.result,
+                        "label": ai_result.label,
+                        "message": ai_result.message,
+                        "model": ai_result.model,
+                        "inference_ms": round(ai_result.inference_ms, 1),
+                        "trigger": requested_trigger,
+                    },
+                )
+            else:
+                _log_ai_event(
+                    runtime,
+                    frame,
+                    source,
+                    "AI_ERROR",
+                    {
+                        "message": ai_result.message,
+                        "model": runtime.ai.model,
+                        "trigger": requested_trigger,
+                    },
+                )
+                _log_ai_event(
+                    runtime,
+                    frame,
+                    source,
+                    "AI_FALLBACK",
+                    {
+                        "result": ai_result.result,
+                        "message": ai_result.message,
+                        "trigger": requested_trigger,
+                    },
+                )
+    else:
+        ai_result = disabled_ai_result(radar_is_fall)
+
+    final_frame = replace(frame, fall_detected=bool(ai_result.result))
+    detection = runtime.detector.update(final_frame)
+    result = runtime.controller.process(final_frame, detection, source)
+    ai_work_state = _ai_work_state(ai_result, did_request)
+    runtime.frame_logger.log(
+        frame,
+        detection.state,
+        source,
+        ai_result,
+        device_state=result.state,
+        ai_work_state=ai_work_state,
+        ai_trigger=ai_trigger,
+    )
     for event in result.events:
         runtime.event_logger.log(event)
 
@@ -284,14 +524,81 @@ def _process_frame(
         f"{frame.timestamp:%H:%M:%S} "
         f"来源={source} "
         f"有人={frame.human_present} "
-        f"跌倒={frame.fall_detected} "
+        f"雷达跌倒={radar_is_fall} "
+        f"AI结果={ai_result.result} "
+        f"AI状态={_ai_status(ai_result.success, ai_result.model)} "
         f"运动={frame.motion_state} "
         f"系统状态={detection.state} "
         f"设备状态={result.state}"
     )
 
     if result.should_alarm:
-        runtime.alarm.emit(frame, detection.state)
+        runtime.alarm.emit(final_frame, detection.state)
+
+
+def _log_ai_event(
+    runtime: RuntimeServices,
+    frame: RadarFrame,
+    source: str,
+    event: EventName,
+    details: dict[str, object],
+) -> None:
+    runtime.event_logger.log(
+        SystemEvent(
+            timestamp=frame.timestamp,
+            event=event,
+            state=runtime.controller.state,
+            source=source,
+            details=json.dumps(details, ensure_ascii=False, separators=(",", ":")),
+            raw=frame.raw,
+        )
+    )
+
+
+def _print_ai_startup_status(
+    ai: OllamaFallAI | None,
+    model: str,
+    periodic_interval: float,
+) -> None:
+    if ai is None:
+        print("[AI] AI bridge disabled")
+        print("[AI] Using radar result directly")
+        return
+
+    health = ai.health_check()
+    if health.connected and health.model_available:
+        print("[AI] Ollama: connected")
+        print(f"[AI] Model: {model}")
+        print("[AI] AI bridge enabled")
+        print(f"[AI] Periodic inference: every {periodic_interval:g}s + transitions")
+        return
+
+    if health.connected:
+        print("[AI] Ollama: connected")
+        print(f"[AI] Model unavailable: {model}")
+        print(f"[AI] Run: ollama pull {model}")
+    else:
+        print("[AI] Ollama unavailable")
+    print(f"[AI] {health.message}")
+    print("[AI] Falling back to radar result")
+
+
+def _ai_status(success: bool, model: str) -> str:
+    if success:
+        return "AI_SUCCESS"
+    if model == "disabled":
+        return "AI_DISABLED"
+    return "AI_FALLBACK"
+
+
+def _ai_work_state(ai_result: FallAIResult, did_request: bool) -> str:
+    if ai_result.model == "disabled":
+        return "IDLE"
+    if not ai_result.success:
+        return "FALLBACK"
+    if ai_result.result == 1:
+        return "FALL_DETECTED"
+    return "COMPLETED" if did_request else "MONITORING"
 
 
 if __name__ == "__main__":

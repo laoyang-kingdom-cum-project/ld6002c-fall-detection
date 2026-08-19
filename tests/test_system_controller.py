@@ -39,10 +39,16 @@ def test_cancelled_alarm_does_not_repeat_for_same_fall() -> None:
     confirmed = update(controller, detector, 5, True)
     assert confirmed.state == "CONFIRMED_FALL"
     assert confirmed.should_alarm is True
+    assert {event.raw for event in confirmed.events} == {"test"}
+    assert {event.event for event in confirmed.events} == {
+        "FALL_DETECTED",
+        "ALARM_TRIGGERED",
+    }
 
     cancellation = controller.cancel_alarm(BASE + timedelta(seconds=6), "sticks3:test")
     assert cancellation is not None
     assert cancellation.event == "ALARM_CANCELLED"
+    assert cancellation.raw == "test"
     assert controller.state == "CANCELLED"
 
     still_falling = update(controller, detector, 10, True)

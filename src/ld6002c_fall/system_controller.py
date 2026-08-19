@@ -36,6 +36,7 @@ class SystemController:
     def __init__(self) -> None:
         self._state: DeviceState = "DISCONNECTED"
         self._cancelled_for_current_fall = False
+        self._latest_raw = ""
         self._lock = threading.Lock()
 
     @property
@@ -52,6 +53,7 @@ class SystemController:
         """Apply one detector result and emit events for meaningful transitions."""
 
         with self._lock:
+            self._latest_raw = frame.raw
             previous_state = self._state
             if not frame.fall_detected:
                 self._cancelled_for_current_fall = False
@@ -67,15 +69,33 @@ class SystemController:
             events: list[SystemEvent] = []
             if next_state == "SUSPECTED_FALL" and previous_state != next_state:
                 events.append(
-                    SystemEvent(frame.timestamp, "FALL_SUSPECTED", next_state, source)
+                    SystemEvent(
+                        frame.timestamp,
+                        "FALL_SUSPECTED",
+                        next_state,
+                        source,
+                        raw=frame.raw,
+                    )
                 )
             if next_state == "CONFIRMED_FALL" and previous_state != next_state:
                 events.append(
-                    SystemEvent(frame.timestamp, "FALL_CONFIRMED", next_state, source)
+                    SystemEvent(
+                        frame.timestamp,
+                        "FALL_DETECTED",
+                        next_state,
+                        source,
+                        raw=frame.raw,
+                    )
                 )
             if should_alarm:
                 events.append(
-                    SystemEvent(frame.timestamp, "ALARM_STARTED", next_state, source)
+                    SystemEvent(
+                        frame.timestamp,
+                        "ALARM_TRIGGERED",
+                        next_state,
+                        source,
+                        raw=frame.raw,
+                    )
                 )
 
             self._state = next_state
@@ -95,4 +115,5 @@ class SystemController:
                 state="CANCELLED",
                 source=source,
                 details="Alarm cancelled from connected device",
+                raw=self._latest_raw,
             )

@@ -1,8 +1,8 @@
 """LD6002C fall detection teaching project."""
 
 from .fall_detector import DetectionResult, FallDetector
-from .radar_model import RadarFrame
+from .radar_model import RadarFrame, RadarPoint
 
-__all__ = ["DetectionResult", "FallDetector", "RadarFrame"]
+__all__ = ["DetectionResult", "FallDetector", "RadarFrame", "RadarPoint"]
 
 __version__ = "0.1.0"
