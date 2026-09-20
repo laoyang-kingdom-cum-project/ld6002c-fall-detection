@@ -12,9 +12,11 @@ def test_windows_entrypoints_and_runtime_scripts_exist() -> None:
     expected = (
         ROOT / "INSTALL_WINDOWS_OFFLINE.bat",
         ROOT / "START_WINDOWS.bat",
+        ROOT / "START_COMMUNITY_DEMO.bat",
         ROOT / "STOP_WINDOWS.bat",
         ROOT / "WINDOWS_CHECK.bat",
         WINDOWS_DIR / "start.ps1",
+        WINDOWS_DIR / "start-community-demo.ps1",
         WINDOWS_DIR / "stop.ps1",
         WINDOWS_DIR / "doctor.ps1",
         WINDOWS_DIR / "install-offline.ps1",
@@ -91,6 +93,22 @@ def test_windows_start_requires_the_installed_python_314_x64_environment() -> No
     assert "Run INSTALL_WINDOWS_OFFLINE.bat" in script
 
 
+def test_windows_community_demo_uses_offline_environment_and_local_model() -> None:
+    launcher = (ROOT / "START_COMMUNITY_DEMO.bat").read_text(encoding="utf-8")
+    script = (WINDOWS_DIR / "start-community-demo.ps1").read_text(encoding="utf-8")
+
+    assert "start-community-demo.ps1" in launcher
+    assert "sys.version_info[:2] == (3, 14)" in script
+    assert "INSTALL_WINDOWS_OFFLINE.bat" in script
+    assert "Get-OllamaTags" in script
+    assert "Get-OllamaModelNames" in script
+    assert '"-m", "ld6002c_fall.community_demo"' in script
+    assert '"--host", "0.0.0.0"' in script
+    assert '"--enable-ai"' in script
+    assert "ollama pull" not in script.casefold()
+    assert "pip install" not in script.casefold()
+
+
 def test_large_offline_payloads_are_not_tracked_by_default() -> None:
     ignore_rules = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
 
@@ -138,6 +156,8 @@ def test_project_wheel_matches_current_windows_runtime_contract() -> None:
     assert "Requires-Dist: streamlit<2,>=1.59" in metadata
     assert "ld6002c_fall/community/controller.py" in names
     assert "ld6002c_fall/community/state_store.py" in names
+    assert "ld6002c_fall/community/telemetry.py" in names
+    assert "ld6002c_fall/community_demo.py" in names
 
 
 def test_service_runner_uses_the_existing_cli_and_mock_fallback() -> None:

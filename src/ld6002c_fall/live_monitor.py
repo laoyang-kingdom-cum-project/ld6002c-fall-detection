@@ -92,7 +92,11 @@ def build_monitor_snapshot(
     latest_timestamp = _text(latest.get("timestamp"))
     timestamp = _parse_timestamp(latest_timestamp)
     current_time = now or datetime.now().astimezone()
-    is_fresh = timestamp is not None and abs((current_time - timestamp).total_seconds()) <= stale_seconds
+    is_demo_snapshot = _text(latest.get("source")).lower() == "community_demo"
+    is_fresh = is_demo_snapshot or (
+        timestamp is not None
+        and abs((current_time - timestamp).total_seconds()) <= stale_seconds
+    )
 
     ai_status = _text(latest.get("ai_status"))
     work_state = _text(latest.get("ai_work_state")) or _work_state(ai_status, latest)
@@ -116,8 +120,9 @@ def build_monitor_snapshot(
     device_state = _text(latest.get("device_state"))
     current_status = _current_status(device_state, human_present) if is_fresh else "DISCONNECTED"
 
+    radar_connected = bool(frame_rows and is_fresh and device_state != "DISCONNECTED")
     return MonitorSnapshot(
-        radar_status="CONNECTED" if frame_rows and is_fresh else "DISCONNECTED",
+        radar_status="CONNECTED" if radar_connected else "DISCONNECTED",
         ollama_status=(
             _ollama_status(ai_status, work_state) if is_fresh else "UNKNOWN"
         ),
@@ -461,6 +466,8 @@ def _sticks3_status(events: list[Row]) -> str:
 
 def _source_label(row: Row) -> str:
     source = _text(row.get("source")).lower()
+    if source == "community_demo" or _text(row.get("raw")).startswith("community-demo:"):
+        return "SIMULATED RADAR DATA · CLASSROOM DEMO"
     if source == "mock" or _text(row.get("raw")).startswith("mock:"):
         return "MOCK"
     if source == "serial":

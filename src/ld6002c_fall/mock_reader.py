@@ -9,6 +9,7 @@ from typing import Literal
 from .radar_model import RadarFrame, RadarPoint
 
 MockScenario = Literal["empty", "normal", "fall-demo", "presence-demo"]
+MockRadarStatus = Literal["NORMAL", "WARNING", "FALL"]
 MOCK_SCENARIOS: tuple[MockScenario, ...] = (
     "empty",
     "normal",
@@ -105,24 +106,69 @@ class MockRadarReader:
         if not human_present:
             return ()
 
-        center_x = 0.28 * math.sin(elapsed_seconds * 0.35)
-        center_y = 1.25 + 0.10 * math.cos(elapsed_seconds * 0.25)
-        if fall_detected:
-            x_offsets = (-0.72, -0.48, -0.24, 0.0, 0.24, 0.48, 0.72)
-            z_values = (0.28, 0.30, 0.32, 0.34, 0.32, 0.30, 0.28)
-            speed = 0.02
-        else:
-            x_offsets = (-0.06, 0.04, -0.05, 0.05, -0.04, 0.03, 0.0)
-            z_values = (0.28, 0.52, 0.78, 1.04, 1.30, 1.55, 1.76)
-            speed = 0.18
+        status: MockRadarStatus = "FALL" if fall_detected else "NORMAL"
+        return _points_for_status(status, elapsed_seconds)
 
-        return tuple(
-            RadarPoint(
-                cluster_id=1,
-                x=center_x + x_offset,
-                y=center_y + 0.025 * math.sin(index + elapsed_seconds * 0.2),
-                z=z,
-                speed=speed,
-            )
-            for index, (x_offset, z) in enumerate(zip(x_offsets, z_values, strict=True))
+
+def build_mock_radar_frame(
+    status: MockRadarStatus,
+    elapsed_seconds: float,
+    *,
+    timestamp: datetime | None = None,
+    resident_id: str = "demo",
+) -> RadarFrame:
+    """Build one deterministic community-demo frame from the existing mock model."""
+
+    if status not in {"NORMAL", "WARNING", "FALL"}:
+        raise ValueError("status must be NORMAL, WARNING, or FALL")
+    if elapsed_seconds < 0:
+        raise ValueError("elapsed_seconds must be non-negative")
+
+    fall_detected = status in {"WARNING", "FALL"}
+    motion_state = {
+        "NORMAL": "moving",
+        "WARNING": "unstable",
+        "FALL": "still",
+    }[status]
+    return RadarFrame(
+        timestamp=timestamp or datetime.now().astimezone(),
+        human_present=True,
+        fall_detected=fall_detected,
+        motion_state=motion_state,
+        raw=(
+            f"community-demo:resident={resident_id};status={status};"
+            f"elapsed={elapsed_seconds:.2f}"
+        ),
+        points=_points_for_status(status, elapsed_seconds),
+    )
+
+
+def _points_for_status(
+    status: MockRadarStatus,
+    elapsed_seconds: float,
+) -> tuple[RadarPoint, ...]:
+    center_x = 0.28 * math.sin(elapsed_seconds * 0.35)
+    center_y = 1.25 + 0.10 * math.cos(elapsed_seconds * 0.25)
+    if status == "FALL":
+        x_offsets = (-0.72, -0.48, -0.24, 0.0, 0.24, 0.48, 0.72)
+        z_values = (0.28, 0.30, 0.32, 0.34, 0.32, 0.30, 0.28)
+        speed = 0.02
+    elif status == "WARNING":
+        x_offsets = (-0.32, -0.20, -0.10, 0.0, 0.12, 0.24, 0.34)
+        z_values = (0.52, 0.65, 0.75, 0.85, 0.95, 1.05, 1.12)
+        speed = 0.08
+    else:
+        x_offsets = (-0.06, 0.04, -0.05, 0.05, -0.04, 0.03, 0.0)
+        z_values = (0.28, 0.52, 0.78, 1.04, 1.30, 1.55, 1.76)
+        speed = 0.18
+
+    return tuple(
+        RadarPoint(
+            cluster_id=1,
+            x=center_x + x_offset,
+            y=center_y + 0.025 * math.sin(index + elapsed_seconds * 0.2),
+            z=z,
+            speed=speed,
         )
+        for index, (x_offset, z) in enumerate(zip(x_offsets, z_values, strict=True))
+    )

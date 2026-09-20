@@ -10,8 +10,10 @@ import pandas as pd
 import streamlit as st
 
 from ld6002c_fall.ai import OllamaFallAI
+from ld6002c_fall.alarm import AlarmOutput, ConsoleAlarm, DesktopAudioAlarm
 from ld6002c_fall.community import (
     CommunityController,
+    CommunityTelemetryStore,
     DemoAction,
     DemoControlResult,
     DemoControlService,
@@ -20,6 +22,11 @@ from ld6002c_fall.community import (
     latest_alarm_resident_id,
 )
 from ld6002c_fall.config import (
+    DEFAULT_ALARM_SOUND_PATH,
+    DEFAULT_ALARM_VOLUME,
+    DEFAULT_AUDIO_ALARM_ENABLED,
+    DEFAULT_COMMUNITY_TELEMETRY_DIR,
+    DEFAULT_AI_ENABLED,
     DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OLLAMA_TIMEOUT,
@@ -42,12 +49,6 @@ EVENT_LABELS = {
     "DEVICE_ONLINE": "设备上线",
     "DEMO_INJECTED": "演示数据注入",
 }
-
-
-def resident_supports_technical_detail(resident: Resident) -> bool:
-    """Only a resident with a real sensor binding may show raw telemetry."""
-
-    return resident.has_live_sensor
 
 
 def render_community_dashboard(controller: CommunityController) -> None:
@@ -116,25 +117,6 @@ def render_demo_console(controller: CommunityController) -> None:
     _render_demo_result(st.session_state.get("demo_last_result"))
     states = controller.states()
     _render_demo_state(controller, states[selected_id])
-
-
-def render_simulated_technical_detail(
-    controller: CommunityController,
-    resident: Resident,
-) -> None:
-    state = controller.states()[resident.id]
-    st.markdown(
-        '<div class="simulation-notice"><strong>模拟社区监护点</strong>'
-        '<span>当前住户没有绑定真实毫米波雷达，不展示或伪造 X/Y/Z 点云。</span></div>',
-        unsafe_allow_html=True,
-    )
-    _render_resident_summary(resident, state)
-    events = [
-        event
-        for event in controller.recent_events(100)
-        if event.get("resident_id") == resident.id
-    ]
-    _render_recent_events(events, title="当前住户事件历史")
 
 
 def _render_statistics(
@@ -220,8 +202,8 @@ def _render_selected_resident(
         unsafe_allow_html=True,
     )
     _render_resident_summary(resident, state)
-    if not resident.has_live_sensor:
-        st.caption("数据来源：模拟社区数据，无真实点云。")
+    if not resident.has_live_sensor or state.demo_override:
+        st.caption("数据来源：SIMULATED RADAR DATA · CLASSROOM DEMO")
 
     action_columns = st.columns(2, gap="small")
     with action_columns[0]:
@@ -232,7 +214,7 @@ def _render_selected_resident(
                 icon=":material/done_all:",
                 use_container_width=True,
             ):
-                controller.acknowledge_alarm(resident.id)
+                _execute_demo_action(controller, resident.id, "ACKNOWLEDGE")
                 st.rerun()
         elif st.button(
             "恢复正常",
@@ -240,7 +222,7 @@ def _render_selected_resident(
             icon=":material/restart_alt:",
             use_container_width=True,
         ):
-            controller.recover(resident.id)
+            _execute_demo_action(controller, resident.id, "RECOVER")
             st.rerun()
     with action_columns[1]:
         if st.button(
@@ -249,7 +231,8 @@ def _render_selected_resident(
             icon=":material/radar:",
             use_container_width=True,
         ):
-            st.session_state["dashboard_pending_view"] = "技术详情"
+            st.query_params["view"] = "technical"
+            st.query_params["resident"] = resident.id
             st.rerun()
 
     latest_event = next(
@@ -349,12 +332,44 @@ def _execute_demo_action(
     resident_id: str,
     action: DemoAction,
 ) -> DemoControlResult:
-    ai = OllamaFallAI(
-        base_url=os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL),
-        model=os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL),
-        timeout=float(os.getenv("OLLAMA_TIMEOUT", str(DEFAULT_OLLAMA_TIMEOUT))),
+    ai_enabled = os.getenv("AI_ENABLED", str(DEFAULT_AI_ENABLED)).strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    ai = (
+        OllamaFallAI(
+            base_url=os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL),
+            model=os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL),
+            timeout=float(os.getenv("OLLAMA_TIMEOUT", str(DEFAULT_OLLAMA_TIMEOUT))),
+        )
+        if ai_enabled
+        else None
     )
-    return DemoControlService(controller, ai).execute(resident_id, action)
+    telemetry = CommunityTelemetryStore(
+        os.getenv(
+            "LD6002C_COMMUNITY_TELEMETRY_DIR",
+            str(DEFAULT_COMMUNITY_TELEMETRY_DIR),
+        )
+    )
+    return DemoControlService(
+        controller,
+        ai,
+        telemetry=telemetry,
+        alarm=_community_alarm(),
+    ).execute(resident_id, action)
+
+
+@st.cache_resource
+def _community_alarm() -> AlarmOutput:
+    enabled = os.getenv(
+        "AUDIO_ALARM_ENABLED",
+        str(DEFAULT_AUDIO_ALARM_ENABLED),
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        return ConsoleAlarm()
+    return DesktopAudioAlarm(
+        os.getenv("ALARM_SOUND_PATH", str(DEFAULT_ALARM_SOUND_PATH)),
+        volume=int(os.getenv("ALARM_VOLUME", str(DEFAULT_ALARM_VOLUME))),
+    )
 
 
 def _render_demo_result(result: object) -> None:
@@ -370,6 +385,8 @@ def _render_demo_result(result: object) -> None:
         f"{result.ai_result.model} · {result.ai_result.inference_ms:.1f} ms\n\n"
         f"{result.ai_result.message}"
     )
+    if result.alarm_triggered:
+        message += "\n\n电脑语音报警已在跌倒状态边沿触发一次。"
     if result.ai_result.success:
         st.success(message)
     else:

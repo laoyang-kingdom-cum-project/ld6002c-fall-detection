@@ -2,7 +2,7 @@
 
 录课电脑只需事先安装 Python 3.14 x64 和 Ollama Windows。完整离线目录复制到电脑后，首次双击安装，之后每次双击启动。脚本不会联网安装、下载模型或修改系统级 `PATH` / ExecutionPolicy。
 
-`START_WINDOWS.bat` 仍启动同一个 `dashboard/app.py`，默认首页现为“幸福社区 · 老人智能安全监测中心”。顶部可切换“社区监控大屏 / 演示控制台 / 技术详情”，原有点云、AI 和原始数据界面仍保留在技术详情中。
+`START_WINDOWS.bat` 用于真实雷达或旧的自动 mock 流程。`START_COMMUNITY_DEMO.bat` 是新的课堂展示入口：不需要雷达，一次启动社区大屏、手机演示控制页、本地 Ollama 判断和电脑语音报警。页面使用 URL 路由，不显示顶部视图切换器。
 
 ## 录课电脑前置准备
 
@@ -21,10 +21,13 @@
 | --- | --- |
 | `INSTALL_WINDOWS_OFFLINE.bat` | 首次创建 `.venv`、安装离线 Python wheel、导入并验证 `qwen3:0.6b`。 |
 | `START_WINDOWS.bat` | 检查环境，必要时启动本地 Ollama，选择真实雷达或 mock，启动主程序和大屏，等待页面可访问后打开浏览器。 |
+| `START_COMMUNITY_DEMO.bat` | 检查同一个 Python 3.14 `.venv`、Ollama、`qwen3:0.6b` 和 ffplay，然后在 `0.0.0.0:8501` 启动社区课堂演示。 |
 | `WINDOWS_CHECK.bat` | 只检查环境，不启动主程序、大屏或 Ollama。 |
 | `STOP_WINDOWS.bat` | 根据 `data\windows-runtime` 中的 PID 状态停止本项目创建的窗口；不会按进程名批量结束 Python。 |
 
 BAT 仅对当前 PowerShell 进程使用 `-ExecutionPolicy Bypass`，不会更改系统永久策略。所有子进程的工作目录都是仓库根目录，支持包含空格和中文的路径。
+
+`START_COMMUNITY_DEMO.bat` 打开 `http://127.0.0.1:8501/`。演示控制台为 `http://127.0.0.1:8501/?view=control`；技术页示例为 `http://127.0.0.1:8501/?view=technical&resident=B2-302`。手机与电脑同网时，把 `127.0.0.1` 替换为电脑局域网 IP。关闭该 BAT 窗口或按 `Ctrl+C` 即停止社区演示。
 
 ## 离线安装内容
 

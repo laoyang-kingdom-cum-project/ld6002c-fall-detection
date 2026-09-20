@@ -53,6 +53,12 @@ class CommunityController:
     def recent_events(self, limit: int = 20) -> list[dict[str, str]]:
         return self.event_logger.read_recent(limit)
 
+    def reset_demo_state(self) -> int:
+        """Reset resident demo overrides and remove only demo-origin events."""
+
+        self.state_store.reset_all()
+        return self.event_logger.clear_demo_events()
+
     def update_from_sensor(
         self,
         resident_id: str,
@@ -111,6 +117,34 @@ class CommunityController:
     ) -> ResidentState:
         """Apply a persistent demo override until the operator recovers it."""
 
+        state, _ = self.inject_demo_transition(
+            resident_id,
+            status,
+            timestamp=timestamp,
+            radar_result=radar_result,
+            ai_result=ai_result,
+            ai_model=ai_model,
+            ai_success=ai_success,
+            source=source,
+            details=details,
+        )
+        return state
+
+    def inject_demo_transition(
+        self,
+        resident_id: str,
+        status: CommunityStatus,
+        *,
+        timestamp: datetime | None = None,
+        radar_result: int | None = None,
+        ai_result: int | None = None,
+        ai_model: str | None = None,
+        ai_success: bool | None = None,
+        source: str = "DEMO",
+        details: str = "",
+    ) -> tuple[ResidentState, bool]:
+        """Apply a demo value and return the lock-protected fall transition."""
+
         resident = self.registry.get(resident_id)
         now = timestamp or local_now()
 
@@ -141,7 +175,7 @@ class CommunityController:
             details or json.dumps({"status": status}, ensure_ascii=False),
         )
         self._log_transition(resident, previous, updated, source, details)
-        return updated
+        return updated, previous.status != "FALL" and updated.status == "FALL"
 
     def acknowledge_alarm(
         self,

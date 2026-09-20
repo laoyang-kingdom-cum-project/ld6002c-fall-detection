@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ld6002c_fall.mock_reader import MockRadarReader
+from ld6002c_fall.mock_reader import MockRadarReader, build_mock_radar_frame
 from ld6002c_fall.radar_model import RadarFrame
 
 
@@ -54,3 +54,11 @@ def test_presence_demo_contains_empty_and_present_periods() -> None:
 
     assert any(frame.human_present for frame in frames)
     assert any(not frame.human_present for frame in frames)
+
+
+def test_community_warning_cloud_has_mid_height_centroid() -> None:
+    frame = build_mock_radar_frame("WARNING", 3.0)
+
+    z_center = sum(point.z for point in frame.points) / len(frame.points)
+    assert 0.7 <= z_center <= 1.0
+    assert frame.motion_state == "unstable"

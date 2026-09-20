@@ -29,6 +29,7 @@ firmware = [
 
 [project.scripts]
 ld6002c-fall = "ld6002c_fall.main:main"
+ld6002c-community-demo = "ld6002c_fall.community_demo:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

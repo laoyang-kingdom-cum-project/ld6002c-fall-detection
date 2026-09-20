@@ -170,6 +170,7 @@ models/           另行加入的 qwen3:0.6b Ollama manifests 和 blobs
 INSTALL_WINDOWS_OFFLINE.bat   创建 .venv、离线安装 wheel、导入并验证模型
 WINDOWS_CHECK.bat             只检查离线环境，不启动系统
 START_WINDOWS.bat             自动检测并启动整套演示
+START_COMMUNITY_DEMO.bat      一键启动社区课堂演示，不需要接入雷达
 STOP_WINDOWS.bat              只停止本项目启动的进程
 ```
 
@@ -180,6 +181,30 @@ STOP_WINDOWS.bat              只停止本项目启动的进程
 所有 Windows 脚本都不会执行在线安装、模型下载或永久修改 ExecutionPolicy / 系统 PATH。固定 COM 口、模型仓库或服务端口时，可复制 `deploy\windows\config.example.cmd` 为 `config.cmd`。完整准备方法、模型验证、停止规则和故障排查见 [Windows 部署说明](deploy/windows/README.md)。
 
 ## 启动速查
+
+### 一条命令启动社区课堂演示
+
+已安装项目并准备好 Ollama 后，在项目根目录执行：
+
+```bash
+ld6002c-community-demo
+```
+
+该命令默认启用 `http://127.0.0.1:11434` 的 `qwen3:0.6b`，在 `0.0.0.0:8501` 启动 Streamlit，打开社区大屏，并在终端打印三个地址：
+
+```text
+http://127.0.0.1:8501/
+http://127.0.0.1:8501/?view=control
+http://127.0.0.1:8501/?view=technical&resident=B2-302
+```
+
+第二个地址是演示控制台；同一局域网的手机可使用终端打印的 `http://<电脑局域网 IP>:8501/?view=control`。如 Ollama 不可用，页面仍可演示，但会明确记录 `AI_FALLBACK`。可用 `--no-enable-ai`、`--no-audio-alarm`、`--port 8502` 覆盖默认值。重置所有社区演示状态、演示事件和分住户遥测后退出：
+
+```bash
+ld6002c-community-demo --reset
+```
+
+Windows 离线部署完成后可直接双击 `START_COMMUNITY_DEMO.bat`，它使用同一个 Python 3.14 `.venv`、离线 wheel、Ollama 模型和 ffplay，不会在现场执行 `pip install` 或 `ollama pull`。
 
 以下流程假设已经完成安装。每个终端先进入同一项目根目录，并按上面的 shell 说明激活 `.venv`。**真实监测与 mock 演示二选一运行**，避免多个主程序同时写入默认日志；Streamlit 大屏在另一个终端独立启动。
 
@@ -267,21 +292,23 @@ python -m streamlit run dashboard/app.py --server.port 8501
 
 演示时可先打开大屏，再启动 `fall-demo`，避免错过前 10 秒的正常阶段；没有新数据时页面可能提示等待数据或 `DISCONNECTED`。退出时，分别在主程序和大屏终端按 `Ctrl+C`。
 
-默认首页是“幸福社区 · 老人智能安全监测中心”；原有单雷达展示保留在顶部“技术详情”视图。
+默认首页是“幸福社区 · 老人智能安全监测中心”。页面不再显示顶部视图切换器；演示控制台使用 `?view=control`，技术详情由住户卡片的“查看技术详情”进入，也可使用 `?view=technical&resident=B2-302` 直达。
 
 ## 社区老人安全监测大屏
 
-`config/community.json` 配置幸福社区 1、2、3 栋共 18 户。`B2-302` 王阿姨绑定真实 `LD6002C`，主程序将现有 `SystemController` 结果单向同步到该住户；其他 17 户是社区演示点，不伪造真实点云。
+`config/community.json` 配置幸福社区 1、2、3 栋共 18 户。`B2-302` 王阿姨绑定真实 `LD6002C`，主程序将现有 `SystemController` 结果单向同步到该住户；其他 17 户是社区课堂演示点，其技术详情使用标记为 `SIMULATED RADAR DATA · CLASSROOM DEMO` 的教学点云，不宣称为真实硬件数据。
 
-页面顶部提供三个视图：
+三个 URL 视图共享文件状态，因此电脑展示大屏和手机控制页能看到同一次演示操作：
 
 - **社区监控大屏**：显示监护住户、在线设备、正常住户、当前报警、今日报警，以及 18 户状态矩阵和最近事件。社区数据每 1.5 秒由 `st.fragment` 局部刷新。
 - **演示控制台**：可向任意住户发送正常、跌倒、疑似异常、离线、恢复和报警确认。演示覆盖会保持到点击“恢复正常”，避免录课时被真实雷达的下一帧立即覆盖。
-- **技术详情**：对 `B2-302` 直接复用雷达链路、AI 判断、点云投影、XYZ 趋势、实时数据总线和原始日志。选中模拟住户时只显示住户状态和事件，明确提示没有真实毫米波点云。
+- **技术详情**：任意住户都复用同一套雷达链路、AI 判断、点云投影、XYZ 趋势、实时数据总线和原始日志渲染器。`B2-302` 无演示覆盖时读取真实 `fall_log.csv`；对它注入演示状态时临时改读分住户模拟遥测，点击“恢复正常”后自动返回真实数据。
 
-“发送跌倒数据”会构造 `is_fall=1`，并调用与真实雷达相同的 `OllamaFallAI`。Qwen3 返回合法结果时记录 `DEMO_AI`；Ollama 不可用或返回非法结构时使用雷输入安全回退，UI 和社区事件都明确标记 `AI_FALLBACK`。
+“发送跌倒数据”会构造 `is_fall=1`，并调用与真实雷达相同的 `OllamaFallAI`。Qwen3 返回合法结果时记录 `DEMO_AI`；Ollama 不可用或返回非法结构时使用雷达输入安全回退，UI 和技术事件都明确标记 `AI_FALLBACK`。每次动作会原子替换该住户最近 30 帧遥测：正常为竖直人体，疑似异常为中高度，跌倒为低位水平人体。离线状态不再产生新点云，技术页显示 `Radar Link DISCONNECTED`。
 
-首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`。状态使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半个 JSON。社区事件写入 `data/community_events.csv`，包含 `FALL_ALERT`、`ALERT_ACKNOWLEDGED`、`RECOVERED`、`DEVICE_OFFLINE`、`DEVICE_ONLINE` 和 `DEMO_INJECTED`。
+电脑语音只在住户首次进入 `FALL` 时触发一次；在状态仍为 `FALL` 时重复点击不会重播。“确认报警”和“恢复正常”都会关闭当前播放；后者还会清除真实住户的演示覆盖。
+
+首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`。状态使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半个 JSON。社区事件写入 `data/community_events.csv`；分住户技术帧与 AI/报警事件写入 `data/community_telemetry/<resident>.csv` 和 `<resident>.events.csv`。
 
 ## 技术详情大屏
 
@@ -462,10 +489,11 @@ ld6002c-fall --mode mock \
 src/ld6002c_fall/      Python 数据源、parser、状态机、日志和电脑报警
 src/ld6002c_fall/ai/   Ollama 客户端、3 秒调度器、结构化模型与固定 Prompt
 src/ld6002c_fall/community/  住户注册、原子状态、事件、传感器映射和演示注入
+src/ld6002c_fall/community_demo.py  一键社区课堂演示启动器
 src/ld6002c_fall/live_monitor.py  AI Live Monitor 的纯数据模型
 tools/                 串口发现与原始数据采集
 config/community.json  幸福社区 18 户配置，B2-302 绑定真实 LD6002C
-dashboard/app.py       Streamlit 三视图入口与原技术大屏
+dashboard/app.py       Streamlit URL 路由入口与技术大屏
 dashboard/community_ui.py  社区矩阵、住户详情、演示控制台和社区事件
 firmware/sticks3_alarm 旧版 StickS3 PlatformIO 参考固件
 ollama/Modelfile       可选的课程模型别名配置

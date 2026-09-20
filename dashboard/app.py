@@ -7,6 +7,7 @@ from datetime import datetime
 from html import escape
 import os
 from pathlib import Path
+from typing import Mapping
 
 import altair as alt
 import pandas as pd
@@ -16,8 +17,6 @@ try:
     from dashboard.community_ui import (
         render_community_dashboard,
         render_demo_console,
-        render_simulated_technical_detail,
-        resident_supports_technical_detail,
     )
 except ModuleNotFoundError as exc:
     if exc.name != "dashboard":
@@ -25,14 +24,14 @@ except ModuleNotFoundError as exc:
     from community_ui import (  # type: ignore[no-redef]
         render_community_dashboard,
         render_demo_console,
-        render_simulated_technical_detail,
-        resident_supports_technical_detail,
     )
-from ld6002c_fall.community import CommunityController
+from ld6002c_fall.ai.ollama_client import disabled_ai_result
+from ld6002c_fall.community import CommunityController, CommunityTelemetryStore
 from ld6002c_fall.config import (
     DEFAULT_COMMUNITY_CONFIG_PATH,
     DEFAULT_COMMUNITY_EVENT_PATH,
     DEFAULT_COMMUNITY_STATE_PATH,
+    DEFAULT_COMMUNITY_TELEMETRY_DIR,
 )
 from ld6002c_fall.csv_snapshot import CSVSnapshotError, read_csv_tail
 from ld6002c_fall.live_monitor import (
@@ -184,19 +183,19 @@ def main() -> None:
     controller = _build_community_controller()
     if controller is None:
         return
-    view = _navigation()
+    view, resident_id = _route_from_query_params(st.query_params)
     header = {
-        "社区监控大屏": (
+        "community": (
             f"{controller.registry.community_name} · 老人智能安全监测中心",
             "Community Elderly Safety Monitoring Center",
             "COMMUNITY OPERATIONS",
         ),
-        "演示控制台": (
+        "control": (
             "社区安全演示控制台",
             "Classroom Scenario Injection Console",
             "DEMO CONTROL",
         ),
-        "技术详情": (
+        "technical": (
             "LD6002C 毫米波雷达技术详情",
             "Radar, AI, Point Cloud and Raw Data",
             "TECHNICAL MONITOR",
@@ -214,12 +213,12 @@ def main() -> None:
         """,
         unsafe_allow_html=True,
     )
-    if view == "社区监控大屏":
+    if view == "community":
         _show_community_dashboard(controller)
-    elif view == "演示控制台":
+    elif view == "control":
         render_demo_console(controller)
     else:
-        _show_technical_detail(controller)
+        _show_technical_detail(controller, resident_id)
 
 
 def _build_community_controller() -> CommunityController | None:
@@ -234,25 +233,21 @@ def _build_community_controller() -> CommunityController | None:
         return None
 
 
-def _navigation() -> str:
-    options = ["社区监控大屏", "演示控制台", "技术详情"]
-    pending = st.session_state.pop("dashboard_pending_view", None)
-    if pending in options:
-        st.session_state["dashboard_view"] = pending
-        st.session_state["dashboard_navigation"] = pending
-    if "dashboard_view" not in st.session_state:
-        st.session_state["dashboard_view"] = options[0]
-    if "dashboard_navigation" not in st.session_state:
-        st.session_state["dashboard_navigation"] = st.session_state["dashboard_view"]
-    selected = st.segmented_control(
-        "视图",
-        options,
-        key="dashboard_navigation",
-        label_visibility="collapsed",
-    )
-    if selected in options:
-        st.session_state["dashboard_view"] = selected
-    return str(st.session_state["dashboard_view"])
+def _route_from_query_params(
+    params: Mapping[str, object],
+) -> tuple[str, str | None]:
+    """Resolve a stable URL route without session-only navigation state."""
+
+    raw_view = params.get("view", "")
+    if isinstance(raw_view, list):
+        raw_view = raw_view[-1] if raw_view else ""
+    view = str(raw_view).strip().lower()
+    route = view if view in {"control", "technical"} else "community"
+    raw_resident = params.get("resident")
+    if isinstance(raw_resident, list):
+        raw_resident = raw_resident[-1] if raw_resident else None
+    resident_id = str(raw_resident).strip() if raw_resident else None
+    return route, resident_id
 
 
 @st.fragment(run_every=COMMUNITY_REFRESH_SECONDS)
@@ -263,24 +258,68 @@ def _show_community_dashboard(controller: CommunityController) -> None:
         render_community_dashboard(controller)
 
 
-def _show_technical_detail(controller: CommunityController) -> None:
-    selected_id = st.session_state.get("selected_resident_id")
+def _show_technical_detail(
+    controller: CommunityController,
+    requested_resident_id: str | None,
+) -> None:
+    if st.button("返回社区大屏", icon=":material/arrow_back:", type="tertiary"):
+        st.query_params.clear()
+        st.rerun()
+    selected_id = requested_resident_id or st.session_state.get("selected_resident_id")
     try:
         resident = controller.registry.get(str(selected_id))
     except KeyError:
         resident = controller.registry.bound_to("LD6002C")
         st.session_state["selected_resident_id"] = resident.id
+    else:
+        st.session_state["selected_resident_id"] = resident.id
+    telemetry = CommunityTelemetryStore(
+        os.getenv(
+            "LD6002C_COMMUNITY_TELEMETRY_DIR",
+            str(DEFAULT_COMMUNITY_TELEMETRY_DIR),
+        )
+    )
+    frame_path, event_path, data_source, use_demo_telemetry = _technical_data_paths(
+        controller,
+        resident.id,
+        telemetry,
+    )
+    if use_demo_telemetry and not telemetry.has_frames(resident.id):
+        telemetry.write_scenario(
+            resident.id,
+            "NORMAL",
+            disabled_ai_result(0),
+            timestamp=datetime.now().astimezone(),
+            frame_count=30,
+        )
     st.markdown(
         '<div class="technical-resident-context"><strong>'
         f'{escape(resident.address)} · {escape(resident.name)} · {resident.age}岁</strong>'
-        f'<span>{escape(resident.sensor_binding or "SIMULATED COMMUNITY DATA")}</span></div>',
+        f'<span>{escape(data_source)}</span></div>',
         unsafe_allow_html=True,
     )
-    if not resident_supports_technical_detail(resident):
-        render_simulated_technical_detail(controller, resident)
-        return
-    _show_live_dashboard()
-    _show_logs()
+    _show_live_dashboard(frame_path, event_path)
+    _show_logs(frame_path, event_path)
+
+
+def _technical_data_paths(
+    controller: CommunityController,
+    resident_id: str,
+    telemetry: CommunityTelemetryStore,
+) -> tuple[Path, Path, str, bool]:
+    """Select real or demo files from persisted resident override state."""
+
+    resident = controller.registry.get(resident_id)
+    state = controller.states()[resident_id]
+    use_demo = state.demo_override or not resident.has_live_sensor
+    if use_demo:
+        return (
+            telemetry.frame_path(resident_id),
+            telemetry.event_path(resident_id),
+            "SIMULATED RADAR DATA · CLASSROOM DEMO",
+            True,
+        )
+    return LOG_PATH, EVENT_LOG_PATH, "HLK-LD6002C · REALTIME", False
 
 
 def _install_styles() -> None:
@@ -346,8 +385,6 @@ def _install_styles() -> None:
             height: 8px;
             width: 8px;
         }
-        [data-testid="stSegmentedControl"] { margin-bottom: 0.2rem; }
-        [data-testid="stSegmentedControl"] button { min-height: 34px; }
         .community-stats {
             display: grid;
             gap: 0.65rem;
@@ -695,15 +732,15 @@ def _install_styles() -> None:
 
 
 @st.fragment(run_every=LIVE_REFRESH_SECONDS)
-def _show_live_dashboard() -> None:
+def _show_live_dashboard(frame_path: Path, event_path: Path) -> None:
     """Refresh live panels without rebuilding the heavier log tables."""
 
     with st.container(key="live-dashboard"):
-        _render_live_dashboard()
+        _render_live_dashboard(frame_path, event_path)
 
 
-def _render_live_dashboard() -> None:
-    frame_data = _read_csv(LOG_PATH)
+def _render_live_dashboard(frame_path: Path, event_path: Path) -> None:
+    frame_data = _read_csv(frame_path)
     if frame_data is None:
         st.info("还没有监测日志，请先运行 ld6002c-fall 主程序。")
         return
@@ -711,7 +748,7 @@ def _render_live_dashboard() -> None:
         st.info("监测日志为空，正在等待第一帧雷达数据。")
         return
 
-    event_data = _read_csv(EVENT_LOG_PATH, missing_ok=True)
+    event_data = _read_csv(event_path, missing_ok=True)
     if event_data is None:
         event_data = pd.DataFrame()
     frame_data = _ensure_monitor_columns(frame_data)
@@ -724,6 +761,10 @@ def _render_live_dashboard() -> None:
         point_history,
         stale_seconds=max(5.0, LIVE_REFRESH_SECONDS * 2.5),
     )
+    if snapshot.radar_status == "DISCONNECTED":
+        cloud_status = "DISCONNECTED"
+    elif snapshot.source == "SIMULATED RADAR DATA · CLASSROOM DEMO" and point_history:
+        cloud_status = "LIVE"
 
     _show_status_bar(snapshot, cloud_status)
     _show_current_alert(snapshot.current_status)
@@ -841,9 +882,14 @@ def _show_coordinates(point_history: list[PointHistoryEntry], source: str) -> No
         unsafe_allow_html=True,
     )
     if not point_history:
+        empty_note = (
+            "模拟设备已离线，恢复后将重新生成连续点云"
+            if source == "SIMULATED RADAR DATA · CLASSROOM DEMO"
+            else "串口模式仅展示 LD6002C 实际 0x0A08 数据"
+        )
         st.markdown(
             '<div class="coordinate-empty"><strong>等待坐标点云</strong>'
-            '<span>串口模式仅展示 LD6002C 实际 0x0A08 数据</span></div>',
+            f'<span>{escape(empty_note)}</span></div>',
             unsafe_allow_html=True,
         )
         return
@@ -1116,14 +1162,14 @@ def _show_sensor_stream(entries: list[SensorStreamEntry]) -> None:
 
 
 @st.fragment(run_every=LOG_REFRESH_SECONDS)
-def _show_logs() -> None:
+def _show_logs(frame_path: Path, event_path: Path) -> None:
     """Refresh large log tables independently to avoid full-page flashing."""
 
     with st.container(key="log-dashboard"):
-        frame_data = _read_csv(LOG_PATH)
+        frame_data = _read_csv(frame_path)
         if frame_data is None or frame_data.empty:
             return
-        event_data = _read_csv(EVENT_LOG_PATH, missing_ok=True)
+        event_data = _read_csv(event_path, missing_ok=True)
         if event_data is None:
             event_data = pd.DataFrame()
         frame_data = _ensure_monitor_columns(frame_data)

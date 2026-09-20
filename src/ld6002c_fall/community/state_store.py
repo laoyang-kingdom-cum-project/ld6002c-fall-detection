@@ -48,6 +48,17 @@ class CommunityStateStore:
             self._write_unlocked(states)
             return previous, updated
 
+    def reset_all(self) -> dict[str, ResidentState]:
+        """Reset persisted community state without touching radar frame logs."""
+
+        with _file_lock(self.path):
+            states = {
+                resident.id: ResidentState(resident_id=resident.id)
+                for resident in self.registry.residents
+            }
+            self._write_unlocked(states)
+            return states
+
     def _read_merged_unlocked(self) -> tuple[dict[str, ResidentState], bool]:
         persisted: dict[str, object] = {}
         changed = not self.path.exists()
@@ -165,6 +176,33 @@ class CommunityEventLogger:
         except OSError as exc:
             raise RuntimeError(f"Failed to read community event log {self.path}: {exc}") from exc
         return rows[-limit:]
+
+    def clear_demo_events(self) -> int:
+        """Remove classroom-injected events while preserving real sensor history."""
+
+        if not self.path.exists():
+            return 0
+        demo_sources = {"DEMO", "DEMO_AI", "AI_FALLBACK", "COMMUNITY_DEMO"}
+        temporary = self.path.with_name(
+            f".{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        try:
+            with _file_lock(self.path):
+                with self.path.open(newline="", encoding="utf-8") as file:
+                    rows = list(csv.DictReader(file))
+                kept = [row for row in rows if row.get("source", "") not in demo_sources]
+                with temporary.open("w", newline="", encoding="utf-8") as file:
+                    writer = csv.DictWriter(file, fieldnames=self.fieldnames)
+                    writer.writeheader()
+                    writer.writerows(kept)
+                    file.flush()
+                    os.fsync(file.fileno())
+                os.replace(temporary, self.path)
+                return len(rows) - len(kept)
+        except OSError as exc:
+            raise RuntimeError(f"Failed to reset community events {self.path}: {exc}") from exc
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 @contextmanager
