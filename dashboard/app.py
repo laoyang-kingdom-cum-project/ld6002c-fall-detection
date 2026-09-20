@@ -12,6 +12,28 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+try:
+    from dashboard.community_ui import (
+        render_community_dashboard,
+        render_demo_console,
+        render_simulated_technical_detail,
+        resident_supports_technical_detail,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "dashboard":
+        raise
+    from community_ui import (  # type: ignore[no-redef]
+        render_community_dashboard,
+        render_demo_console,
+        render_simulated_technical_detail,
+        resident_supports_technical_detail,
+    )
+from ld6002c_fall.community import CommunityController
+from ld6002c_fall.config import (
+    DEFAULT_COMMUNITY_CONFIG_PATH,
+    DEFAULT_COMMUNITY_EVENT_PATH,
+    DEFAULT_COMMUNITY_STATE_PATH,
+)
 from ld6002c_fall.csv_snapshot import CSVSnapshotError, read_csv_tail
 from ld6002c_fall.live_monitor import (
     AIChatEntry,
@@ -34,6 +56,7 @@ EVENT_LOG_PATH = Path(
     os.getenv("LD6002C_EVENT_LOG_PATH", PROJECT_ROOT / "data" / "events.csv")
 )
 LIVE_REFRESH_SECONDS = float(os.getenv("DASHBOARD_REFRESH_SECONDS", "2.0"))
+COMMUNITY_REFRESH_SECONDS = float(os.getenv("COMMUNITY_REFRESH_SECONDS", "1.5"))
 LOG_REFRESH_SECONDS = float(os.getenv("DASHBOARD_LOG_REFRESH_SECONDS", "5.0"))
 DASHBOARD_MAX_ROWS = int(os.getenv("DASHBOARD_MAX_ROWS", "600"))
 
@@ -151,25 +174,111 @@ def _css_theme_variables() -> str:
 
 def main() -> None:
     st.set_page_config(
-        page_title="LD6002C 跌倒监测大屏",
+        page_title="幸福社区 · 老人安全监测中心",
         page_icon=":material/radar:",
         layout="wide",
         initial_sidebar_state="collapsed",
     )
     _install_styles()
     _install_scroll_policy()
+    controller = _build_community_controller()
+    if controller is None:
+        return
+    view = _navigation()
+    header = {
+        "社区监控大屏": (
+            f"{controller.registry.community_name} · 老人智能安全监测中心",
+            "Community Elderly Safety Monitoring Center",
+            "COMMUNITY OPERATIONS",
+        ),
+        "演示控制台": (
+            "社区安全演示控制台",
+            "Classroom Scenario Injection Console",
+            "DEMO CONTROL",
+        ),
+        "技术详情": (
+            "LD6002C 毫米波雷达技术详情",
+            "Radar, AI, Point Cloud and Raw Data",
+            "TECHNICAL MONITOR",
+        ),
+    }[view]
     st.markdown(
-        """
+        f"""
         <header class="wall-header">
           <div>
-            <div class="wall-kicker">LD6002C · 60 GHz FALL DETECTION</div>
-            <h1>老人跌倒智能监测大屏</h1>
+            <div class="wall-kicker">{escape(header[1])}</div>
+            <h1>{escape(header[0])}</h1>
           </div>
-          <div class="wall-live"><span></span> LIVE MONITOR</div>
+          <div class="wall-live"><span></span> {escape(header[2])}</div>
         </header>
         """,
         unsafe_allow_html=True,
     )
+    if view == "社区监控大屏":
+        _show_community_dashboard(controller)
+    elif view == "演示控制台":
+        render_demo_console(controller)
+    else:
+        _show_technical_detail(controller)
+
+
+def _build_community_controller() -> CommunityController | None:
+    try:
+        return CommunityController.from_paths(
+            os.getenv("LD6002C_COMMUNITY_CONFIG_PATH", str(DEFAULT_COMMUNITY_CONFIG_PATH)),
+            os.getenv("LD6002C_COMMUNITY_STATE_PATH", str(DEFAULT_COMMUNITY_STATE_PATH)),
+            os.getenv("LD6002C_COMMUNITY_EVENT_PATH", str(DEFAULT_COMMUNITY_EVENT_PATH)),
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        st.error(f"社区监护数据初始化失败：{exc}")
+        return None
+
+
+def _navigation() -> str:
+    options = ["社区监控大屏", "演示控制台", "技术详情"]
+    pending = st.session_state.pop("dashboard_pending_view", None)
+    if pending in options:
+        st.session_state["dashboard_view"] = pending
+        st.session_state["dashboard_navigation"] = pending
+    if "dashboard_view" not in st.session_state:
+        st.session_state["dashboard_view"] = options[0]
+    if "dashboard_navigation" not in st.session_state:
+        st.session_state["dashboard_navigation"] = st.session_state["dashboard_view"]
+    selected = st.segmented_control(
+        "视图",
+        options,
+        key="dashboard_navigation",
+        label_visibility="collapsed",
+    )
+    if selected in options:
+        st.session_state["dashboard_view"] = selected
+    return str(st.session_state["dashboard_view"])
+
+
+@st.fragment(run_every=COMMUNITY_REFRESH_SECONDS)
+def _show_community_dashboard(controller: CommunityController) -> None:
+    """Refresh community state without flashing the whole Streamlit page."""
+
+    with st.container(key="community-dashboard"):
+        render_community_dashboard(controller)
+
+
+def _show_technical_detail(controller: CommunityController) -> None:
+    selected_id = st.session_state.get("selected_resident_id")
+    try:
+        resident = controller.registry.get(str(selected_id))
+    except KeyError:
+        resident = controller.registry.bound_to("LD6002C")
+        st.session_state["selected_resident_id"] = resident.id
+    st.markdown(
+        '<div class="technical-resident-context"><strong>'
+        f'{escape(resident.address)} · {escape(resident.name)} · {resident.age}岁</strong>'
+        f'<span>{escape(resident.sensor_binding or "SIMULATED COMMUNITY DATA")}</span></div>',
+        unsafe_allow_html=True,
+    )
+    if not resident_supports_technical_detail(resident):
+        render_simulated_technical_detail(controller, resident)
+        return
     _show_live_dashboard()
     _show_logs()
 
@@ -237,6 +346,108 @@ def _install_styles() -> None:
             height: 8px;
             width: 8px;
         }
+        [data-testid="stSegmentedControl"] { margin-bottom: 0.2rem; }
+        [data-testid="stSegmentedControl"] button { min-height: 34px; }
+        .community-stats {
+            display: grid;
+            gap: 0.65rem;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            margin: 0.65rem 0 0.8rem;
+        }
+        .community-stat {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-top: 3px solid var(--sage);
+            border-radius: 6px;
+            padding: 0.55rem 0.75rem;
+        }
+        .community-stat:nth-child(4), .community-stat:nth-child(5) { border-top-color: var(--terra); }
+        .community-stat span {
+            color: var(--muted);
+            display: block;
+            font-size: 0.68rem;
+            margin-bottom: 0.1rem;
+        }
+        .community-stat strong { display: block; font-size: 1.35rem; line-height: 1.1; }
+        .section-heading {
+            align-items: baseline;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.55rem;
+            padding-bottom: 0.4rem;
+        }
+        .section-heading.compact { margin-top: 0.75rem; }
+        .section-heading h2 { font-size: 1rem; margin: 0.08rem 0 0; }
+        .section-heading span { color: var(--muted); font-size: 0.7rem; }
+        div[class*="st-key-resident-card-"] { margin-bottom: 0.35rem; }
+        div[class*="st-key-resident-card-"] button {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--sage);
+            border-radius: 6px;
+            color: var(--ink);
+            min-height: 70px;
+            padding: 0.5rem 0.6rem;
+            text-align: left;
+        }
+        div[class*="st-key-resident-card-"] button p {
+            font-size: 0.73rem;
+            line-height: 1.45;
+            white-space: pre-line;
+        }
+        div[class*="st-key-resident-card-warning"] button {
+            background: color-mix(in srgb, var(--amber) 9%, var(--surface));
+            border-left-color: var(--amber);
+        }
+        div[class*="st-key-resident-card-fall"] button {
+            background: color-mix(in srgb, var(--danger) 13%, var(--surface));
+            border-color: var(--danger);
+            border-left-width: 5px;
+            color: var(--danger);
+        }
+        div[class*="st-key-resident-card-offline"] button {
+            background: var(--surface-soft);
+            border-left-color: var(--muted);
+            color: var(--muted);
+        }
+        div[class*="-selected-"] button { box-shadow: 0 0 0 2px var(--terra); }
+        .st-key-community-detail-panel {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            min-height: 480px;
+            padding: 0.9rem;
+        }
+        .st-key-community-detail-panel .panel-heading {
+            margin-bottom: 0.4rem;
+            padding-bottom: 0.4rem;
+        }
+        .st-key-community-detail-panel .state-hero { padding: 0.35rem 0 0.55rem; }
+        .st-key-community-detail-panel .state-value { font-size: 1.45rem; }
+        .st-key-community-detail-panel .detail-row { min-height: 34px; }
+        .technical-resident-context {
+            align-items: center;
+            background: var(--surface-soft);
+            border-left: 4px solid var(--terra);
+            display: flex;
+            justify-content: space-between;
+            margin: 0.55rem 0 0.75rem;
+            padding: 0.55rem 0.75rem;
+        }
+        .technical-resident-context strong { font-size: 0.9rem; }
+        .technical-resident-context span { color: var(--muted); font-size: 0.72rem; }
+        .simulation-notice {
+            background: var(--surface-soft);
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--amber);
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin-bottom: 0.75rem;
+            padding: 0.75rem;
+        }
+        .simulation-notice span { color: var(--muted); font-size: 0.78rem; }
         .monitor-status-grid {
             display: grid;
             gap: 0.65rem;
@@ -457,6 +668,7 @@ def _install_styles() -> None:
         @media (max-width: 1100px) {
             [data-testid="stMainBlockContainer"] { padding-left: 1rem; padding-right: 1rem; }
             .monitor-status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .community-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
             .st-key-overview-panel,
             .st-key-coordinate-panel,
             .st-key-ai-panel { min-height: auto; }
@@ -466,6 +678,7 @@ def _install_styles() -> None:
             .wall-header h1 { font-size: 1.45rem; }
             .wall-live { margin-top: 0.3rem; }
             .monitor-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .community-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .coordinate-stats, .ai-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .axis-trend-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .coordinate-stat:nth-child(2), .ai-meta-item:nth-child(2) { border-right: 0; }

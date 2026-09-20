@@ -1,0 +1,23 @@
+{
+  "community_name": "幸福社区",
+  "residents": [
+    {"id": "B1-101", "building": "1栋", "room": "101", "name": "张爷爷", "age": 72},
+    {"id": "B1-102", "building": "1栋", "room": "102", "name": "李阿姨", "age": 74},
+    {"id": "B1-201", "building": "1栋", "room": "201", "name": "陈爷爷", "age": 81},
+    {"id": "B1-202", "building": "1栋", "room": "202", "name": "刘阿姨", "age": 69},
+    {"id": "B1-301", "building": "1栋", "room": "301", "name": "周爷爷", "age": 78},
+    {"id": "B1-302", "building": "1栋", "room": "302", "name": "孙阿姨", "age": 73},
+    {"id": "B2-101", "building": "2栋", "room": "101", "name": "吴爷爷", "age": 75},
+    {"id": "B2-102", "building": "2栋", "room": "102", "name": "郑阿姨", "age": 70},
+    {"id": "B2-201", "building": "2栋", "room": "201", "name": "冯爷爷", "age": 83},
+    {"id": "B2-202", "building": "2栋", "room": "202", "name": "褚阿姨", "age": 77},
+    {"id": "B2-301", "building": "2栋", "room": "301", "name": "李爷爷", "age": 74},
+    {"id": "B2-302", "building": "2栋", "room": "302", "name": "王阿姨", "age": 76, "sensor_binding": "LD6002C"},
+    {"id": "B3-101", "building": "3栋", "room": "101", "name": "赵爷爷", "age": 68},
+    {"id": "B3-102", "building": "3栋", "room": "102", "name": "赵阿姨", "age": 71},
+    {"id": "B3-201", "building": "3栋", "room": "201", "name": "钱爷爷", "age": 80},
+    {"id": "B3-202", "building": "3栋", "room": "202", "name": "何阿姨", "age": 72},
+    {"id": "B3-301", "building": "3栋", "room": "301", "name": "高爷爷", "age": 79},
+    {"id": "B3-302", "building": "3栋", "room": "302", "name": "林阿姨", "age": 75}
+  ]
+}

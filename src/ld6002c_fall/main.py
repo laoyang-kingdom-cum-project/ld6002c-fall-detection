@@ -28,6 +28,10 @@ from .config import (
     DEFAULT_AUDIO_ALARM_ENABLED,
     DEFAULT_BAUDRATE,
     DEFAULT_CONFIRM_SECONDS,
+    DEFAULT_COMMUNITY_CONFIG_PATH,
+    DEFAULT_COMMUNITY_EVENT_PATH,
+    DEFAULT_COMMUNITY_RESIDENT_ID,
+    DEFAULT_COMMUNITY_STATE_PATH,
     DEFAULT_EVENT_LOG_PATH,
     DEFAULT_LOG_PATH,
     DEFAULT_OLLAMA_BASE_URL,
@@ -39,6 +43,7 @@ from .config import (
     DEFAULT_WEBSOCKET_HOST,
     DEFAULT_WEBSOCKET_PORT,
 )
+from .community import CommunityController
 from .device_server import DeviceWebSocketServer
 from .event_logger import CSVEventLogger, EventName, SystemEvent
 from .fall_detector import FallDetector
@@ -62,6 +67,8 @@ class RuntimeServices:
     ai: OllamaFallAI | None = None
     ai_scheduler: AIInferenceScheduler | None = None
     device_server: DeviceWebSocketServer | None = None
+    community_controller: CommunityController | None = None
+    community_resident_id: str = DEFAULT_COMMUNITY_RESIDENT_ID
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -118,6 +125,29 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_EVENT_LOG_PATH,
         help="业务事件 CSV 日志保存路径",
+    )
+    parser.add_argument(
+        "--community-config-path",
+        type=Path,
+        default=DEFAULT_COMMUNITY_CONFIG_PATH,
+        help="社区住户配置 JSON 路径",
+    )
+    parser.add_argument(
+        "--community-state-path",
+        type=Path,
+        default=DEFAULT_COMMUNITY_STATE_PATH,
+        help="社区动态状态 JSON 路径",
+    )
+    parser.add_argument(
+        "--community-event-path",
+        type=Path,
+        default=DEFAULT_COMMUNITY_EVENT_PATH,
+        help="社区事件 CSV 路径",
+    )
+    parser.add_argument(
+        "--community-resident-id",
+        default=DEFAULT_COMMUNITY_RESIDENT_ID,
+        help="真实 LD6002C 绑定的住户 ID",
     )
     parser.add_argument(
         "--suspect-seconds",
@@ -262,6 +292,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         if args.audio_alarm_enabled
         else ConsoleAlarm()
     )
+    try:
+        community_controller = CommunityController.from_paths(
+            args.community_config_path,
+            args.community_state_path,
+            args.community_event_path,
+        )
+        bound_resident = community_controller.registry.get(args.community_resident_id)
+        if bound_resident.sensor_binding != "LD6002C":
+            raise ValueError(
+                f"住户 {bound_resident.id} 未绑定 LD6002C 传感器"
+            )
+    except (KeyError, RuntimeError, ValueError) as exc:
+        raise SystemExit(f"社区监护配置无效：{exc}") from exc
+
     runtime = RuntimeServices(
         detector=FallDetector(
             suspect_seconds=args.suspect_seconds,
@@ -278,6 +322,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             if ai is not None
             else None
         ),
+        community_controller=community_controller,
+        community_resident_id=args.community_resident_id,
     )
 
     if not args.disable_websocket:
@@ -516,6 +562,21 @@ def _process_frame(
     )
     for event in result.events:
         runtime.event_logger.log(event)
+
+    if runtime.community_controller is not None:
+        try:
+            runtime.community_controller.update_from_sensor(
+                runtime.community_resident_id,
+                radar_result=radar_is_fall,
+                ai_result=ai_result.result,
+                device_state=result.state,
+                timestamp=frame.timestamp,
+                ai_model=ai_result.model,
+                ai_success=ai_result.success,
+                source=f"LD6002C:{source}",
+            )
+        except (KeyError, RuntimeError, ValueError) as exc:
+            print(f"[Community] 住户状态同步失败：{exc}")
 
     if runtime.device_server is not None:
         runtime.device_server.broadcast_state(result.state, frame.timestamp)

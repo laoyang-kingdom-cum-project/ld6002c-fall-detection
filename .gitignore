@@ -29,6 +29,8 @@ models/
 .vscode/
 
 data/*.csv
+data/community_state.json
+data/community_state.json.lock
 !data/.gitkeep
 data/windows-runtime/
 data/raw/*.bin

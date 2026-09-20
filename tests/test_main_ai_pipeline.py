@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from ld6002c_fall.ai import AIInferenceScheduler, OllamaFallAI
 from ld6002c_fall.alarm import ConsoleAlarm
+from ld6002c_fall.community import CommunityController
 from ld6002c_fall.event_logger import CSVEventLogger
 from ld6002c_fall.fall_detector import FallDetector
 from ld6002c_fall.logger import CSVFrameLogger
@@ -15,6 +17,7 @@ from ld6002c_fall.system_controller import SystemController
 
 
 BASE = datetime(2026, 8, 15, 12, 0, 0)
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_pipeline_calls_ai_on_both_signal_edges_and_logs_events(tmp_path) -> None:
@@ -61,3 +64,37 @@ def test_pipeline_calls_ai_on_both_signal_edges_and_logs_events(tmp_path) -> Non
     assert events.count("AI_RESPONSE") == 3
     assert "FALL_DETECTED" in events
     assert "ALARM_TRIGGERED" in events
+
+
+def test_serial_pipeline_updates_bound_community_resident(tmp_path) -> None:
+    community = CommunityController.from_paths(
+        ROOT / "config" / "community.json",
+        tmp_path / "community_state.json",
+        tmp_path / "community_events.csv",
+    )
+    runtime = RuntimeServices(
+        detector=FallDetector(suspect_seconds=0, confirm_seconds=0),
+        frame_logger=CSVFrameLogger(tmp_path / "frames.csv"),
+        event_logger=CSVEventLogger(tmp_path / "events.csv"),
+        alarm=ConsoleAlarm(),
+        controller=SystemController(),
+        community_controller=community,
+        community_resident_id="B2-302",
+    )
+
+    _process_frame(
+        RadarFrame(
+            timestamp=BASE,
+            human_present=True,
+            fall_detected=True,
+            motion_state="still",
+            raw="serial:confirmed-fall",
+        ),
+        runtime,
+        "serial",
+    )
+
+    state = community.states()["B2-302"]
+    assert state.status == "FALL"
+    assert state.radar_result == state.ai_result == 1
+    assert state.source == "LD6002C:serial"

@@ -132,9 +132,12 @@ def test_project_wheel_matches_current_windows_runtime_contract() -> None:
             name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
         )
         metadata = archive.read(metadata_name).decode("utf-8")
+        names = set(archive.namelist())
 
     assert "Requires-Python: >=3.11" in metadata
     assert "Requires-Dist: streamlit<2,>=1.59" in metadata
+    assert "ld6002c_fall/community/controller.py" in names
+    assert "ld6002c_fall/community/state_store.py" in names
 
 
 def test_service_runner_uses_the_existing_cli_and_mock_fallback() -> None:

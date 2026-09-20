@@ -267,7 +267,23 @@ python -m streamlit run dashboard/app.py --server.port 8501
 
 演示时可先打开大屏，再启动 `fall-demo`，避免错过前 10 秒的正常阶段；没有新数据时页面可能提示等待数据或 `DISCONNECTED`。退出时，分别在主程序和大屏终端按 `Ctrl+C`。
 
-## 实时监测展示大屏
+默认首页是“幸福社区 · 老人智能安全监测中心”；原有单雷达展示保留在顶部“技术详情”视图。
+
+## 社区老人安全监测大屏
+
+`config/community.json` 配置幸福社区 1、2、3 栋共 18 户。`B2-302` 王阿姨绑定真实 `LD6002C`，主程序将现有 `SystemController` 结果单向同步到该住户；其他 17 户是社区演示点，不伪造真实点云。
+
+页面顶部提供三个视图：
+
+- **社区监控大屏**：显示监护住户、在线设备、正常住户、当前报警、今日报警，以及 18 户状态矩阵和最近事件。社区数据每 1.5 秒由 `st.fragment` 局部刷新。
+- **演示控制台**：可向任意住户发送正常、跌倒、疑似异常、离线、恢复和报警确认。演示覆盖会保持到点击“恢复正常”，避免录课时被真实雷达的下一帧立即覆盖。
+- **技术详情**：对 `B2-302` 直接复用雷达链路、AI 判断、点云投影、XYZ 趋势、实时数据总线和原始日志。选中模拟住户时只显示住户状态和事件，明确提示没有真实毫米波点云。
+
+“发送跌倒数据”会构造 `is_fall=1`，并调用与真实雷达相同的 `OllamaFallAI`。Qwen3 返回合法结果时记录 `DEMO_AI`；Ollama 不可用或返回非法结构时使用雷输入安全回退，UI 和社区事件都明确标记 `AI_FALLBACK`。
+
+首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`。状态使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半个 JSON。社区事件写入 `data/community_events.csv`，包含 `FALL_ALERT`、`ALERT_ACKNOWLEDGED`、`RECOVERED`、`DEVICE_OFFLINE`、`DEVICE_ONLINE` 和 `DEMO_INJECTED`。
+
+## 技术详情大屏
 
 终端 1 先产生数据：
 
@@ -434,7 +450,7 @@ ld6002c-fall --mode mock \
 - `0x0F09`：人体存在状态。
 - `0x0A08`：3D 点云，数据区包含目标数，以及每个点的聚类 ID、X/Y/Z 坐标和速度。
 
-帧日志默认写入 `data/fall_log.csv`；状态变化、AI 调用和设备交互事件写入 `data/events.csv`。事件包括 `AI_REQUEST`、`AI_RESPONSE`、`AI_ERROR`、`AI_FALLBACK`、`FALL_SUSPECTED`、`FALL_DETECTED`、`ALARM_TRIGGERED`、`ALARM_CANCELLED`、`DEVICE_CONNECTED`、`DEVICE_DISCONNECTED`。事件会同时保存触发时的原始雷达数据。Streamlit 实时区默认每 2 秒、日志表格每 5 秒自动更新，无需手动刷新浏览器。
+帧日志默认写入 `data/fall_log.csv`；状态变化、AI 调用和设备交互事件写入 `data/events.csv`。事件包括 `AI_REQUEST`、`AI_RESPONSE`、`AI_ERROR`、`AI_FALLBACK`、`FALL_SUSPECTED`、`FALL_DETECTED`、`ALARM_TRIGGERED`、`ALARM_CANCELLED`、`DEVICE_CONNECTED`、`DEVICE_DISCONNECTED`。事件会同时保存触发时的原始雷达数据。社区层另外使用 `data/community_state.json` 和 `data/community_events.csv`，不修改原始雷达 CSV 格式。Streamlit 社区区域默认每 1.5 秒、技术实时区每 2 秒、日志表格每 5 秒自动更新，无需手动刷新浏览器。
 
 帧日志同时记录 `radar_is_fall`、`ai_result`、`ai_label`、`ai_status`、`ai_success`、`ai_cached`、`ai_model`、`ai_inference_ms`、`ai_message`、`final_result`、`device_state`、`ai_work_state`、`ai_trigger`、`point_count` 和 `radar_points`，用于展示“雷达输入 → 本地 AI → Python 状态机 → 最终业务结果”的完整链路。`radar_points` 使用 JSON 保存每个点的聚类 ID、坐标和速度；`ai_cached=true` 表示当前帧复用了最近一次校验结果。旧日志会自动迁移并补充空点云，不会被误标为真实坐标。
 
@@ -445,9 +461,12 @@ ld6002c-fall --mode mock \
 ```text
 src/ld6002c_fall/      Python 数据源、parser、状态机、日志和电脑报警
 src/ld6002c_fall/ai/   Ollama 客户端、3 秒调度器、结构化模型与固定 Prompt
+src/ld6002c_fall/community/  住户注册、原子状态、事件、传感器映射和演示注入
 src/ld6002c_fall/live_monitor.py  AI Live Monitor 的纯数据模型
 tools/                 串口发现与原始数据采集
-dashboard/app.py       Streamlit 实时监测展示大屏
+config/community.json  幸福社区 18 户配置，B2-302 绑定真实 LD6002C
+dashboard/app.py       Streamlit 三视图入口与原技术大屏
+dashboard/community_ui.py  社区矩阵、住户详情、演示控制台和社区事件
 firmware/sticks3_alarm 旧版 StickS3 PlatformIO 参考固件
 ollama/Modelfile       可选的课程模型别名配置
 data/raw/              本地真实采样目录

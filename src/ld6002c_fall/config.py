@@ -9,6 +9,16 @@ from pathlib import Path
 
 DEFAULT_LOG_PATH = Path("data/fall_log.csv")
 DEFAULT_EVENT_LOG_PATH = Path("data/events.csv")
+DEFAULT_COMMUNITY_CONFIG_PATH = Path(
+    os.getenv("LD6002C_COMMUNITY_CONFIG_PATH", "config/community.json")
+)
+DEFAULT_COMMUNITY_STATE_PATH = Path(
+    os.getenv("LD6002C_COMMUNITY_STATE_PATH", "data/community_state.json")
+)
+DEFAULT_COMMUNITY_EVENT_PATH = Path(
+    os.getenv("LD6002C_COMMUNITY_EVENT_PATH", "data/community_events.csv")
+)
+DEFAULT_COMMUNITY_RESIDENT_ID = os.getenv("LD6002C_RESIDENT_ID", "B2-302")
 DEFAULT_BAUDRATE = 115200
 DEFAULT_SUSPECT_SECONDS = 2.0
 DEFAULT_CONFIRM_SECONDS = 5.0
