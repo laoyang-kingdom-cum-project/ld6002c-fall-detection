@@ -146,12 +146,12 @@ ld6002c-fall --help
 
 Windows 10/11 x64 录课电脑只需事先安装 **Python 3.11 x64** 和 **Ollama Windows**。复制完整离线交付目录后，不需要网络、Open WebUI、在线 pip 下载或 `ollama pull`。
 
-完整离线交付目录必须另外携带以下构建产物；它们是 U 盘交付载荷，不进入普通 Git 历史：
+完整离线交付目录必须携带以下构建产物。Python wheel 可以作为离线发布资源维护；数百 MB 的 Ollama 模型不进入普通 Git 历史，需要另外放入 U 盘交付目录：
 
 ```text
 wheelhouse/       Windows CPython 3.11 第三方依赖 wheel
 project-wheel/    ld6002c_fall_detection-*.whl
-models/           qwen3:0.6b 的 Ollama manifests 和 blobs
+models/           另行加入的 qwen3:0.6b Ollama manifests 和 blobs
 ```
 
 第一次部署：

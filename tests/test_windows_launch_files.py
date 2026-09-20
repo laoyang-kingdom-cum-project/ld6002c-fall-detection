@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zipfile import ZipFile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,8 +95,6 @@ def test_large_offline_payloads_are_not_tracked_by_default() -> None:
     ignore_rules = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
 
     assert "models/" in ignore_rules
-    assert "wheelhouse/" in ignore_rules
-    assert "project-wheel/" in ignore_rules
 
 
 def test_requirements_reference_has_no_builder_absolute_path() -> None:
@@ -103,6 +102,39 @@ def test_requirements_reference_has_no_builder_absolute_path() -> None:
     if requirements.exists():
         content = requirements.read_text(encoding="utf-8").casefold()
         assert "ld6002c-fall-detection @ file:" not in content
+
+
+def test_windows_wheelhouse_targets_cpython_311_not_314() -> None:
+    names = [path.name.casefold() for path in (ROOT / "wheelhouse").glob("*.whl")]
+
+    assert names
+    assert not any("cp314" in name for name in names)
+    for package in (
+        "charset_normalizer",
+        "httptools",
+        "markupsafe",
+        "numpy",
+        "pandas",
+        "pillow",
+        "pyarrow",
+        "rpds_py",
+        "websockets",
+    ):
+        assert any(name.startswith(f"{package}-") and "cp311" in name for name in names)
+
+
+def test_project_wheel_matches_current_windows_runtime_contract() -> None:
+    wheels = sorted((ROOT / "project-wheel").glob("ld6002c_fall_detection-*.whl"))
+
+    assert wheels
+    with ZipFile(wheels[-1]) as archive:
+        metadata_name = next(
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        )
+        metadata = archive.read(metadata_name).decode("utf-8")
+
+    assert "Requires-Python: >=3.11" in metadata
+    assert "Requires-Dist: streamlit<2,>=1.59" in metadata
 
 
 def test_service_runner_uses_the_existing_cli_and_mock_fallback() -> None:

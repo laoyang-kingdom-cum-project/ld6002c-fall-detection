@@ -21,10 +21,8 @@ env/
 build/
 dist/
 
-# Large payloads belong to the USB/offline bundle, not normal Git history.
+# Ollama model blobs belong to the USB/offline bundle, not normal Git history.
 models/
-wheelhouse/
-project-wheel/
 
 .DS_Store
 .idea/

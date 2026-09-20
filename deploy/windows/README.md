@@ -121,4 +121,4 @@ data/windows-runtime/
 
 ## 验证边界
 
-普通 Git 仓库忽略 `models/`、`wheelhouse/` 和 `project-wheel/`；制作 U 盘交付目录时必须另外放入这些真实载荷。当前脚本在 Linux 开发环境中执行 pytest 和静态检查，仍需在断网的 Windows 10/11 x64 真机验证：删除 `.venv` 后首次安装、模型大文件复制、Ollama 识别、CP2104 COM、ffplay，以及重复启动和停止后的进程行为。
+普通 Git 仓库忽略大型 `models/`；制作 U 盘交付目录时必须另外放入真实模型，并确认仓库中的 `wheelhouse/` 和 `project-wheel/` 一并复制。当前脚本在 Linux 开发环境中执行 pytest 和静态检查，仍需在断网的 Windows 10/11 x64 真机验证：删除 `.venv` 后首次安装、模型大文件复制、Ollama 识别、CP2104 COM、ffplay，以及重复启动和停止后的进程行为。
