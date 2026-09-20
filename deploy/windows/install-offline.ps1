@@ -42,11 +42,11 @@ function Invoke-PythonProbe {
     }
 }
 
-function Get-Python311Runtime {
+function Get-Python314Runtime {
     $pyCommand = Get-Command "py.exe" -ErrorAction SilentlyContinue
     if ($null -ne $pyCommand) {
-        $probe = Invoke-PythonProbe -FilePath $pyCommand.Source -PrefixArguments @("-3.11")
-        if ($null -ne $probe -and $probe.Info.major -eq 3 -and $probe.Info.minor -eq 11 -and $probe.Info.bits -eq 64) {
+        $probe = Invoke-PythonProbe -FilePath $pyCommand.Source -PrefixArguments @("-3.14")
+        if ($null -ne $probe -and $probe.Info.major -eq 3 -and $probe.Info.minor -eq 14 -and $probe.Info.bits -eq 64) {
             return $probe
         }
     }
@@ -54,7 +54,7 @@ function Get-Python311Runtime {
     $pythonCommand = Get-Command "python.exe" -ErrorAction SilentlyContinue
     if ($null -ne $pythonCommand) {
         $probe = Invoke-PythonProbe -FilePath $pythonCommand.Source
-        if ($null -ne $probe -and $probe.Info.major -eq 3 -and $probe.Info.minor -eq 11 -and $probe.Info.bits -eq 64) {
+        if ($null -ne $probe -and $probe.Info.major -eq 3 -and $probe.Info.minor -eq 14 -and $probe.Info.bits -eq 64) {
             return $probe
         }
     }
@@ -79,7 +79,7 @@ function Test-VenvPython {
     if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
         return $false
     }
-    & $venvPython -c "import struct,sys; assert sys.version_info[:2] == (3, 11) and struct.calcsize('P') * 8 == 64" 2>$null
+    & $venvPython -c "import struct,sys; assert sys.version_info[:2] == (3, 14) and struct.calcsize('P') * 8 == 64" 2>$null
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -128,10 +128,10 @@ try {
     Write-Host " LD6002C Windows Offline Installation" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
 
-    Write-Step 1 7 "Checking Python 3.11 x64..."
-    $pythonRuntime = Get-Python311Runtime
+    Write-Step 1 7 "Checking Python 3.14 x64..."
+    $pythonRuntime = Get-Python314Runtime
     if ($null -eq $pythonRuntime) {
-        throw "Python 3.11 x64 is required. Install it before running this offline installer."
+        throw "Python 3.14 x64 is required. Install it before running this offline installer."
     }
     Write-Ok ("Python {0}.{1}.{2} x64: {3}" -f $pythonRuntime.Info.major, $pythonRuntime.Info.minor, $pythonRuntime.Info.micro, $pythonRuntime.Info.executable)
 
@@ -145,9 +145,9 @@ try {
     }
     if (Test-Path -LiteralPath $venvDirectory -PathType Container) {
         if (-not (Test-VenvPython)) {
-            throw "The existing .venv is damaged or is not Python 3.11 x64. Run INSTALL_WINDOWS_OFFLINE.bat -Repair."
+            throw "The existing .venv is damaged or is not Python 3.14 x64. Run INSTALL_WINDOWS_OFFLINE.bat -Repair."
         }
-        Write-Ok "Existing Python 3.11 x64 virtual environment"
+        Write-Ok "Existing Python 3.14 x64 virtual environment"
     }
     else {
         $exitCode = Invoke-BasePython -Runtime $pythonRuntime -Arguments @("-m", "venv", $venvDirectory)
@@ -155,7 +155,7 @@ try {
             if (Test-Path -LiteralPath $venvDirectory) {
                 Remove-Item -LiteralPath $venvDirectory -Recurse -Force -ErrorAction SilentlyContinue
             }
-            throw "Failed to create the project .venv with Python 3.11 x64."
+            throw "Failed to create the project .venv with Python 3.14 x64."
         }
         $venvCreatedThisRun = $true
         Write-Ok "Virtual environment created"
@@ -183,7 +183,7 @@ try {
     Write-Host ("      Project wheel: {0}" -f $projectWheel.Name)
     & $venvPython -m pip install --disable-pip-version-check --no-index --only-binary=:all: --find-links $wheelhouse $projectWheel.FullName
     if ($LASTEXITCODE -ne 0) {
-        throw "Offline Python package installation failed. Check that wheelhouse contains every Windows CPython 3.11 dependency."
+        throw "Offline Python package installation failed. Check that wheelhouse contains every Windows CPython 3.14 dependency."
     }
     Write-Ok "Python dependencies and project package"
 

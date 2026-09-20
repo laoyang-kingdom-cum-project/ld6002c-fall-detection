@@ -58,7 +58,7 @@ def test_offline_installer_uses_only_packaged_python_and_model_assets() -> None:
     folded = script.casefold()
 
     assert 'get-command "py.exe"' in folded
-    assert 'prefixarguments @("-3.11")' in folded
+    assert 'prefixarguments @("-3.14")' in folded
     assert "$probe.info.bits -eq 64" in folded
     assert "--no-index" in script
     assert "--disable-pip-version-check" in script
@@ -83,10 +83,10 @@ def test_doctor_treats_an_installed_but_stopped_ollama_as_a_warning() -> None:
     assert 'Report-Error ("Ollama API offline' not in script
 
 
-def test_windows_start_requires_the_installed_python_311_x64_environment() -> None:
+def test_windows_start_requires_the_installed_python_314_x64_environment() -> None:
     script = (WINDOWS_DIR / "start.ps1").read_text(encoding="utf-8")
 
-    assert "sys.version_info[:2] == (3, 11)" in script
+    assert "sys.version_info[:2] == (3, 14)" in script
     assert "struct.calcsize('P') * 8 == 64" in script
     assert "Run INSTALL_WINDOWS_OFFLINE.bat" in script
 
@@ -104,11 +104,11 @@ def test_requirements_reference_has_no_builder_absolute_path() -> None:
         assert "ld6002c-fall-detection @ file:" not in content
 
 
-def test_windows_wheelhouse_targets_cpython_311_not_314() -> None:
+def test_windows_wheelhouse_targets_cpython_314_not_311() -> None:
     names = [path.name.casefold() for path in (ROOT / "wheelhouse").glob("*.whl")]
 
     assert names
-    assert not any("cp314" in name for name in names)
+    assert not any("cp311" in name for name in names)
     for package in (
         "charset_normalizer",
         "httptools",
@@ -120,7 +120,7 @@ def test_windows_wheelhouse_targets_cpython_311_not_314() -> None:
         "rpds_py",
         "websockets",
     ):
-        assert any(name.startswith(f"{package}-") and "cp311" in name for name in names)
+        assert any(name.startswith(f"{package}-") and "cp314" in name for name in names)
 
 
 def test_project_wheel_matches_current_windows_runtime_contract() -> None:

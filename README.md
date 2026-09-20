@@ -144,12 +144,12 @@ ld6002c-fall --help
 
 ## Windows 离线安装与一键启动
 
-Windows 10/11 x64 录课电脑只需事先安装 **Python 3.11 x64** 和 **Ollama Windows**。复制完整离线交付目录后，不需要网络、Open WebUI、在线 pip 下载或 `ollama pull`。
+Windows 10/11 x64 录课电脑只需事先安装 **Python 3.14 x64** 和 **Ollama Windows**。复制完整离线交付目录后，不需要网络、Open WebUI、在线 pip 下载或 `ollama pull`。
 
 完整离线交付目录必须携带以下构建产物。Python wheel 可以作为离线发布资源维护；数百 MB 的 Ollama 模型不进入普通 Git 历史，需要另外放入 U 盘交付目录：
 
 ```text
-wheelhouse/       Windows CPython 3.11 第三方依赖 wheel
+wheelhouse/       Windows CPython 3.14 第三方依赖 wheel
 project-wheel/    ld6002c_fall_detection-*.whl
 models/           另行加入的 qwen3:0.6b Ollama manifests 和 blobs
 ```
@@ -157,7 +157,7 @@ models/           另行加入的 qwen3:0.6b Ollama manifests 和 blobs
 第一次部署：
 
 ```text
-1. 安装 Python 3.11 x64
+1. 安装 Python 3.14 x64
 2. 安装 Ollama Windows
 3. 复制完整离线项目目录
 4. 双击 INSTALL_WINDOWS_OFFLINE.bat
@@ -173,7 +173,7 @@ START_WINDOWS.bat             自动检测并启动整套演示
 STOP_WINDOWS.bat              只停止本项目启动的进程
 ```
 
-安装器只接受 Python 3.11 x64，只从 `wheelhouse/` 和 `project-wheel/` 安装，使用 `--no-index` 禁止访问包索引；模型安全合并到 `OLLAMA_MODELS` 或 `%USERPROFILE%\.ollama\models`，不会删除已有模型。若 `.venv` 损坏，可在命令提示符运行 `INSTALL_WINDOWS_OFFLINE.bat -Repair` 重建。
+安装器只接受 Python 3.14 x64，只从 `wheelhouse/` 和 `project-wheel/` 安装，使用 `--no-index` 禁止访问包索引；模型安全合并到 `OLLAMA_MODELS` 或 `%USERPROFILE%\.ollama\models`，不会删除已有模型。若 `.venv` 损坏，可在命令提示符运行 `INSTALL_WINDOWS_OFFLINE.bat -Repair` 重建。
 
 `START_WINDOWS.bat` 会检查项目 `.venv`、必要时启动 Ollama、确认模型、识别 CP210x/CP2104 对应的 `COMx`，随后启动雷达服务和 AI Live Monitor；页面可访问后才打开浏览器。若没有真实雷达，可输入 `M` 切换 Mock Fall Demo。ffplay 缺失只会禁用电脑语音。
 

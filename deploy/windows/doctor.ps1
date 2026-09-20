@@ -69,12 +69,12 @@ if (Test-Path -LiteralPath $pythonExe -PathType Leaf) {
     else {
         Report-Error "The project Python executable cannot run."
     }
-    & $pythonExe -c "import struct,sys; assert sys.version_info[:2] == (3, 11) and struct.calcsize('P') * 8 == 64; import ld6002c_fall, serial, streamlit" 2>$null
+    & $pythonExe -c "import struct,sys; assert sys.version_info[:2] == (3, 14) and struct.calcsize('P') * 8 == 64; import ld6002c_fall, serial, streamlit" 2>$null
     if ($LASTEXITCODE -eq 0) {
         Report-Ok "Project package, pyserial, and Streamlit"
     }
     else {
-        Report-Error "Project import failed or .venv is not Python 3.11 x64."
+        Report-Error "Project import failed or .venv is not Python 3.14 x64."
     }
 }
 else {

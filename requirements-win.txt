@@ -1,4 +1,4 @@
-# Windows CPython 3.11 x64 runtime dependency reference.
+# Windows CPython 3.14 x64 runtime dependency reference.
 # INSTALL_WINDOWS_OFFLINE.bat installs the project wheel and resolves only from wheelhouse/.
 altair==6.3.0
 anyio==4.15.1
@@ -15,7 +15,7 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 MarkupSafe==3.0.3
 narwhals==2.26.0
-numpy==2.4.6
+numpy==2.5.3
 packaging==26.3
 pandas==3.0.6
 pillow==12.3.0

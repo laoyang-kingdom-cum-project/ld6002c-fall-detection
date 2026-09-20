@@ -1,17 +1,17 @@
 # Windows 10/11 x64 离线安装与一键启动
 
-录课电脑只需事先安装 Python 3.11 x64 和 Ollama Windows。完整离线目录复制到电脑后，首次双击安装，之后每次双击启动。脚本不会联网安装、下载模型或修改系统级 `PATH` / ExecutionPolicy。
+录课电脑只需事先安装 Python 3.14 x64 和 Ollama Windows。完整离线目录复制到电脑后，首次双击安装，之后每次双击启动。脚本不会联网安装、下载模型或修改系统级 `PATH` / ExecutionPolicy。
 
 ## 录课电脑前置准备
 
-1. 安装 Python 3.11 x64。安装器会拒绝 32 位、3.10、3.12 或其他版本。
+1. 安装 Python 3.14 x64。安装器会拒绝 32 位或其他 Python 版本。
 2. 安装 Ollama Windows；也兼容已经准备好的 `runtime\ollama\ollama.exe`。
 3. 复制完整离线交付目录，确认包含 `wheelhouse\`、`project-wheel\` 和 `models\`。
 4. 双击 `INSTALL_WINDOWS_OFFLINE.bat`，等待 `INSTALLATION COMPLETE`。
 5. 安装 Silicon Labs CP210x 驱动，连接 LD6002C 后在设备管理器确认出现 `COMx`。
 6. 可选准备 ffplay；缺少播放器时只关闭电脑声音，不影响雷达、AI、日志或大屏。
 
-不要从另一台电脑复制 `.venv`。安装器会在目标电脑创建正式 `.venv`，并用该电脑的 Python 3.11 从离线 wheel 重建环境。
+不要从另一台电脑复制 `.venv`。安装器会在目标电脑创建正式 `.venv`，并用该电脑的 Python 3.14 从离线 wheel 重建环境。
 
 ## 双击入口
 
@@ -26,7 +26,7 @@ BAT 仅对当前 PowerShell 进程使用 `-ExecutionPolicy Bypass`，不会更�
 
 ## 离线安装内容
 
-安装器优先使用 `py -3.11`，找不到时再检查 `python.exe`，并验证解释器必须是 Python 3.11 x64。正式环境固定为 `.venv`；`.builder-venv` 和 `.offline-test` 不参与部署。
+安装器优先使用 `py -3.14`，找不到时再检查 `python.exe`，并验证解释器必须是 Python 3.14 x64。正式环境固定为 `.venv`；`.builder-venv` 和 `.offline-test` 不参与部署。
 
 Python 安装命令固定使用 `--no-index --find-links wheelhouse`，项目本体来自 `project-wheel\ld6002c_fall_detection-*.whl`。有多个项目 wheel 时选择修改时间最新的文件并打印文件名。完成后执行 `pip check` 和项目导入检查。`requirements-win.txt` 即使存在也只作为锁定依赖参考，安装器不依赖其中的本机路径。
 
@@ -121,4 +121,4 @@ data/windows-runtime/
 
 ## 验证边界
 
-普通 Git 仓库忽略大型 `models/`；制作 U 盘交付目录时必须另外放入真实模型，并确认仓库中的 `wheelhouse/` 和 `project-wheel/` 一并复制。当前脚本在 Linux 开发环境中执行 pytest 和静态检查，仍需在断网的 Windows 10/11 x64 真机验证：删除 `.venv` 后首次安装、模型大文件复制、Ollama 识别、CP2104 COM、ffplay，以及重复启动和停止后的进程行为。
+普通 Git 仓库忽略大型 `models/`；制作 U 盘交付目录时必须另外放入真实模型，并确认仓库中的 `wheelhouse/` 和 `project-wheel/` 一并复制。当前脚本在 Linux 开发环境中执行 pytest 和静态检查，仍需在断网的 Windows 10/11 x64 + Python 3.14 真机验证：删除 `.venv` 后首次安装、模型大文件复制、Ollama 识别、CP2104 COM、ffplay，以及重复启动和停止后的进程行为。

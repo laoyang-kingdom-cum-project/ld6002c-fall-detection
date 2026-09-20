@@ -123,9 +123,9 @@ try {
     if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
         throw ("Project virtual environment is missing: {0}`nRun the Windows offline installation process first." -f $pythonExe)
     }
-    & $pythonExe -c "import struct,sys; assert sys.version_info[:2] == (3, 11) and struct.calcsize('P') * 8 == 64; import ld6002c_fall, serial, streamlit"
+    & $pythonExe -c "import struct,sys; assert sys.version_info[:2] == (3, 14) and struct.calcsize('P') * 8 == 64; import ld6002c_fall, serial, streamlit"
     if ($LASTEXITCODE -ne 0) {
-        throw "Python 3.11 x64, the project package, pyserial, or Streamlit is not ready in .venv. Run INSTALL_WINDOWS_OFFLINE.bat."
+        throw "Python 3.14 x64, the project package, pyserial, or Streamlit is not ready in .venv. Run INSTALL_WINDOWS_OFFLINE.bat."
     }
     $pythonVersion = (& $pythonExe -c "import sys; print('.'.join(map(str, sys.version_info[:3])))").Trim()
     Write-Ok "Python $pythonVersion and project package"
