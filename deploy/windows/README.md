@@ -1,33 +1,44 @@
-# Windows 10/11 x64 离线一键启动
+# Windows 10/11 x64 离线安装与一键启动
 
-该目录只负责检查和启动现有 Python、Ollama、LD6002C 串口、电脑语音及 Streamlit 大屏，不会联网安装依赖、下载模型或修改系统级 `PATH` / ExecutionPolicy。
+录课电脑只需事先安装 Python 3.11 x64 和 Ollama Windows。完整离线目录复制到电脑后，首次双击安装，之后每次双击启动。脚本不会联网安装、下载模型或修改系统级 `PATH` / ExecutionPolicy。
 
 ## 录课电脑前置准备
 
-1. 安装 64 位 Python 3.11 或更高版本，并在项目根目录创建 `.venv`。
-2. 使用离线 wheel 包完成项目安装，确保以下命令成功：
-
-   ```powershell
-   .\.venv\Scripts\python.exe -c "import ld6002c_fall, serial, streamlit"
-   ```
-
-   不建议从另一台电脑直接复制 `.venv`，因为其中的解释器路径通常与原电脑绑定。可在联网电脑准备 wheelhouse，再在目标电脑使用 `--no-index --find-links` 安装。
-3. 安装 Ollama，或者将 standalone `ollama.exe` 放到 `runtime\ollama\ollama.exe`。
-4. 提前把 `qwen3:0.6b` 放入目标电脑的 Ollama 模型存储，并在断网状态下确认 `ollama list` 能看到该名称。一键启动不会执行 `ollama pull`。
+1. 安装 Python 3.11 x64。安装器会拒绝 32 位、3.10、3.12 或其他版本。
+2. 安装 Ollama Windows；也兼容已经准备好的 `runtime\ollama\ollama.exe`。
+3. 复制完整离线交付目录，确认包含 `wheelhouse\`、`project-wheel\` 和 `models\`。
+4. 双击 `INSTALL_WINDOWS_OFFLINE.bat`，等待 `INSTALLATION COMPLETE`。
 5. 安装 Silicon Labs CP210x 驱动，连接 LD6002C 后在设备管理器确认出现 `COMx`。
-6. 可选：安装 FFmpeg，或将 `ffplay.exe` 放到 `runtime\ffmpeg\bin\ffplay.exe` / `vendor\ffmpeg\bin\ffplay.exe`。缺少播放器时系统会关闭电脑声音并继续运行。
+6. 可选准备 ffplay；缺少播放器时只关闭电脑声音，不影响雷达、AI、日志或大屏。
 
-准备完成后，先双击仓库根目录的 `WINDOWS_CHECK.bat`。没有 `[ERROR]` 时，再双击 `START_WINDOWS.bat`。
+不要从另一台电脑复制 `.venv`。安装器会在目标电脑创建正式 `.venv`，并用该电脑的 Python 3.11 从离线 wheel 重建环境。
 
 ## 双击入口
 
 | 文件 | 作用 |
 | --- | --- |
+| `INSTALL_WINDOWS_OFFLINE.bat` | 首次创建 `.venv`、安装离线 Python wheel、导入并验证 `qwen3:0.6b`。 |
 | `START_WINDOWS.bat` | 检查环境，必要时启动本地 Ollama，选择真实雷达或 mock，启动主程序和大屏，等待页面可访问后打开浏览器。 |
 | `WINDOWS_CHECK.bat` | 只检查环境，不启动主程序、大屏或 Ollama。 |
 | `STOP_WINDOWS.bat` | 根据 `data\windows-runtime` 中的 PID 状态停止本项目创建的窗口；不会按进程名批量结束 Python。 |
 
 BAT 仅对当前 PowerShell 进程使用 `-ExecutionPolicy Bypass`，不会更改系统永久策略。所有子进程的工作目录都是仓库根目录，支持包含空格和中文的路径。
+
+## 离线安装内容
+
+安装器优先使用 `py -3.11`，找不到时再检查 `python.exe`，并验证解释器必须是 Python 3.11 x64。正式环境固定为 `.venv`；`.builder-venv` 和 `.offline-test` 不参与部署。
+
+Python 安装命令固定使用 `--no-index --find-links wheelhouse`，项目本体来自 `project-wheel\ld6002c_fall_detection-*.whl`。有多个项目 wheel 时选择修改时间最新的文件并打印文件名。完成后执行 `pip check` 和项目导入检查。`requirements-win.txt` 即使存在也只作为锁定依赖参考，安装器不依赖其中的本机路径。
+
+安装器检查 `models\manifests\registry.ollama.ai\library\qwen3\0.6b` 及其引用的每个 blob，然后合并复制到 `OLLAMA_MODELS` 指定目录；未设置时使用 `%USERPROFILE%\.ollama\models`。复制不会使用 `/MIR`，不会删除用户原有模型。目标模型已经完整时直接跳过大文件复制。
+
+模型复制后通过本机 `/api/tags` 验证。如果 Ollama 原本未运行，安装器会临时启动 `ollama serve`，验证完成后只停止自己创建的临时进程；原本已运行的 Ollama 会直接复用且不会关闭。
+
+如果 `.venv` 损坏或版本不正确，在命令提示符运行：
+
+```bat
+INSTALL_WINDOWS_OFFLINE.bat -Repair
+```
 
 ## 串口选择
 
@@ -68,6 +79,7 @@ set "LD6002C_PORT=COM5"
 | `LD6002C_DASHBOARD_PORT` | `8501` | Streamlit 本机端口。 |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama API 地址。 |
 | `OLLAMA_MODEL` | `qwen3:0.6b` | 必须已经离线存在的模型名。 |
+| `OLLAMA_MODELS` | `%USERPROFILE%\.ollama\models` | 可选的自定义 Ollama 模型仓库；示例配置默认保持注释。 |
 | `ALARM_VOLUME` | `100` | ffplay 播放音量，范围 0～100。 |
 
 ## 运行状态与停止
@@ -105,8 +117,8 @@ data/windows-runtime/
 
 ### 模型缺失
 
-在有网络的准备环境完成模型下载和离线迁移，回到录课电脑后用 `ollama list` 确认。启动脚本不会现场下载。
+确认离线目录包含完整 `models\manifests` 和 `models\blobs`，再运行 `INSTALL_WINDOWS_OFFLINE.bat`。安装器和启动器都不会现场下载。Ollama 已安装但服务停止时，`WINDOWS_CHECK.bat` 会根据本地 manifest/blob 给出离线确认和警告，而不是错误地判定服务不可用。
 
 ## 验证边界
 
-仓库在 Linux 开发环境中执行 pytest 和静态检查；PowerShell 脚本按 Windows PowerShell 5.1 语法编写。仍需在目标 Windows 10/11 x64 电脑验证 CP2104 驱动、真实 COM 口、Ollama 安装位置、模型存储迁移、ffplay 音频设备以及两次双击/停止后的进程行为。
+普通 Git 仓库忽略 `models/`、`wheelhouse/` 和 `project-wheel/`；制作 U 盘交付目录时必须另外放入这些真实载荷。当前脚本在 Linux 开发环境中执行 pytest 和静态检查，仍需在断网的 Windows 10/11 x64 真机验证：删除 `.venv` 后首次安装、模型大文件复制、Ollama 识别、CP2104 COM、ffplay，以及重复启动和停止后的进程行为。

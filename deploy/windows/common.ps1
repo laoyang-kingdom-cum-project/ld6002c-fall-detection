@@ -118,6 +118,141 @@ function Get-OllamaModelNames {
     return @($names | Select-Object -Unique)
 }
 
+function Get-OllamaModelStore {
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($env:OLLAMA_MODELS)) {
+            $expanded = [Environment]::ExpandEnvironmentVariables($env:OLLAMA_MODELS.Trim())
+            return [IO.Path]::GetFullPath($expanded)
+        }
+        if ([string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+            return $null
+        }
+        return [IO.Path]::GetFullPath((Join-Path $env:USERPROFILE ".ollama\models"))
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-OllamaManifestPath {
+    param(
+        [string]$ModelStore,
+        [string]$ModelName
+    )
+    if ([string]::IsNullOrWhiteSpace($ModelStore) -or [string]::IsNullOrWhiteSpace($ModelName)) {
+        return $null
+    }
+
+    $repository = $ModelName.Trim()
+    $tag = "latest"
+    $slashIndex = $repository.LastIndexOf("/")
+    $colonIndex = $repository.LastIndexOf(":")
+    if ($colonIndex -gt $slashIndex) {
+        $tag = $repository.Substring($colonIndex + 1)
+        $repository = $repository.Substring(0, $colonIndex)
+    }
+
+    $parts = @($repository -split "/")
+    if ($parts.Count -eq 1) {
+        $namespace = "library"
+        $name = $parts[0]
+    }
+    elseif ($parts.Count -eq 2) {
+        $namespace = $parts[0]
+        $name = $parts[1]
+    }
+    else {
+        return $null
+    }
+    foreach ($segment in @($namespace, $name, $tag)) {
+        if ([string]::IsNullOrWhiteSpace($segment) -or $segment -eq "." -or $segment -eq "..") {
+            return $null
+        }
+    }
+    return Join-Path $ModelStore ("manifests\registry.ollama.ai\{0}\{1}\{2}" -f $namespace, $name, $tag)
+}
+
+function Get-OllamaModelFileStatus {
+    param(
+        [string]$ModelStore,
+        [string]$ModelName
+    )
+    $manifestPath = Get-OllamaManifestPath $ModelStore $ModelName
+    if ([string]::IsNullOrWhiteSpace($manifestPath) -or -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        return [PSCustomObject]@{
+            Complete = $false
+            ManifestPath = $manifestPath
+            MissingBlobs = @()
+            Reason = "manifest missing"
+        }
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        return [PSCustomObject]@{
+            Complete = $false
+            ManifestPath = $manifestPath
+            MissingBlobs = @()
+            Reason = "manifest is invalid JSON"
+        }
+    }
+
+    $digests = @()
+    $configProperty = $manifest.PSObject.Properties["config"]
+    if ($null -ne $configProperty -and $null -ne $configProperty.Value) {
+        $digestProperty = $configProperty.Value.PSObject.Properties["digest"]
+        if ($null -ne $digestProperty) {
+            $digests += [string]$digestProperty.Value
+        }
+    }
+    $layersProperty = $manifest.PSObject.Properties["layers"]
+    if ($null -ne $layersProperty -and $null -ne $layersProperty.Value) {
+        foreach ($layer in @($layersProperty.Value)) {
+            if ($null -eq $layer) { continue }
+            $digestProperty = $layer.PSObject.Properties["digest"]
+            if ($null -ne $digestProperty) {
+                $digests += [string]$digestProperty.Value
+            }
+        }
+    }
+    $digests = @($digests | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    if ($digests.Count -eq 0) {
+        return [PSCustomObject]@{
+            Complete = $false
+            ManifestPath = $manifestPath
+            MissingBlobs = @()
+            Reason = "manifest contains no blob digests"
+        }
+    }
+
+    $missingBlobs = @()
+    foreach ($digest in $digests) {
+        if ($digest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
+            $missingBlobs += $digest
+            continue
+        }
+        $blobName = $digest.Replace(":", "-")
+        $blobPath = Join-Path $ModelStore ("blobs\{0}" -f $blobName)
+        if (-not (Test-Path -LiteralPath $blobPath -PathType Leaf)) {
+            $missingBlobs += $digest
+            continue
+        }
+        $blob = Get-Item -LiteralPath $blobPath -ErrorAction SilentlyContinue
+        if ($null -eq $blob -or $blob.Length -le 0) {
+            $missingBlobs += $digest
+        }
+    }
+
+    return [PSCustomObject]@{
+        Complete = ($missingBlobs.Count -eq 0)
+        ManifestPath = $manifestPath
+        MissingBlobs = @($missingBlobs)
+        Reason = $(if ($missingBlobs.Count -eq 0) { "complete" } else { "one or more blobs are missing" })
+    }
+}
+
 function Get-OllamaExecutable {
     param([string]$RepoRoot)
     $command = Get-Command "ollama.exe" -ErrorAction SilentlyContinue

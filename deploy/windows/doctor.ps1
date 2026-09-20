@@ -60,19 +60,21 @@ if ($dashboardPortConfigError) {
 }
 
 if (Test-Path -LiteralPath $pythonExe -PathType Leaf) {
-    $version = (& $pythonExe -c "import sys; print('.'.join(map(str, sys.version_info[:3])))" 2>$null).Trim()
-    if ($LASTEXITCODE -eq 0) {
+    $versionOutput = & $pythonExe -c "import struct,sys; print('.'.join(map(str, sys.version_info[:3])) + ' x' + str(struct.calcsize('P') * 8))" 2>$null
+    $versionExitCode = $LASTEXITCODE
+    $version = ($versionOutput -join "").Trim()
+    if ($versionExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($version)) {
         Report-Ok ("Python venv: {0}" -f $version)
     }
     else {
         Report-Error "The project Python executable cannot run."
     }
-    & $pythonExe -c "import sys; assert sys.version_info >= (3, 11); import ld6002c_fall, serial, streamlit" 2>$null
+    & $pythonExe -c "import struct,sys; assert sys.version_info[:2] == (3, 11) and struct.calcsize('P') * 8 == 64; import ld6002c_fall, serial, streamlit" 2>$null
     if ($LASTEXITCODE -eq 0) {
         Report-Ok "Project package, pyserial, and Streamlit"
     }
     else {
-        Report-Error "Project import failed or Python is older than 3.11."
+        Report-Error "Project import failed or .venv is not Python 3.11 x64."
     }
 }
 else {
@@ -81,7 +83,7 @@ else {
 
 $ollamaExe = Get-OllamaExecutable $repoRoot
 if ([string]::IsNullOrWhiteSpace($ollamaExe)) {
-    Report-Warn "ollama.exe not found in PATH, LocalAppData, or runtime\ollama."
+    Report-Error "Ollama is not installed in PATH, LocalAppData, or runtime\ollama."
 }
 else {
     Report-Ok ("Ollama executable: {0}" -f $ollamaExe)
@@ -89,8 +91,25 @@ else {
 
 $tags = Get-OllamaTags $ollamaBaseUrl
 if ($null -eq $tags) {
-    Report-Error ("Ollama API offline: {0}" -f $ollamaBaseUrl)
-    Report-Error ("AI model cannot be verified: {0}" -f $ollamaModel)
+    if (-not [string]::IsNullOrWhiteSpace($ollamaExe)) {
+        Report-Warn "Ollama service is currently stopped. START_WINDOWS.bat will start it automatically."
+        Report-Warn ("AI model cannot be verified through the API until Ollama starts: {0}" -f $ollamaModel)
+    }
+    $targetModelStore = Get-OllamaModelStore
+    $targetModelStatus = Get-OllamaModelFileStatus -ModelStore $targetModelStore -ModelName $ollamaModel
+    if ($targetModelStatus.Complete) {
+        Report-Ok ("Offline model store: {0}" -f $ollamaModel)
+    }
+    else {
+        $sourceModelStore = Join-Path $repoRoot "models"
+        $sourceModelStatus = Get-OllamaModelFileStatus -ModelStore $sourceModelStore -ModelName $ollamaModel
+        if ($sourceModelStatus.Complete) {
+            Report-Warn ("Packaged offline model is available but is not installed. Run INSTALL_WINDOWS_OFFLINE.bat: {0}" -f $ollamaModel)
+        }
+        else {
+            Report-Error ("Offline model is missing or incomplete in both the Ollama store and repo models directory: {0}" -f $ollamaModel)
+        }
+    }
 }
 else {
     Report-Ok ("Ollama API: {0}" -f $ollamaBaseUrl)

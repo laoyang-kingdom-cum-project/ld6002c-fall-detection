@@ -15,7 +15,7 @@
 | Streamlit | 本机大屏使用 **1.59.2**，下方安装命令显式安装此版本。当前页面使用 `st.fragment`、`st.context.theme` 等接口，不能仅按依赖文件中较宽松的 `streamlit>=1.30` 下限准备环境。 |
 | 浏览器 | 需要支持 WebSocket 和 CSS `light-dark()`；后者用于大屏深浅色适配。 |
 | 工作目录 | 从项目根目录运行命令，并确保 `data/` 可写。主程序和大屏应使用同一份项目目录及日志文件。 |
-| 网络 | 首次安装 Python 依赖、下载 Ollama 模型需要访问对应下载源；依赖和模型就绪后，本地 mock/serial 演示无需云端 AI 服务。 |
+| 网络 | 常规开发环境首次安装依赖和下载模型需要网络；准备完整 Windows 离线包后，录课电脑的安装和运行全程不需要联网。 |
 
 项目的 Python 依赖由 `pyproject.toml` 管理，安装项目时自动安装：
 
@@ -142,29 +142,42 @@ python -m streamlit version
 ld6002c-fall --help
 ```
 
-## Windows 离线一键启动
+## Windows 离线安装与一键启动
 
-Windows 10/11 x64 录课电脑完成以下前置准备后，老师只需双击仓库根目录的 `START_WINDOWS.bat`：
+Windows 10/11 x64 录课电脑只需事先安装 **Python 3.11 x64** 和 **Ollama Windows**。复制完整离线交付目录后，不需要网络、Open WebUI、在线 pip 下载或 `ollama pull`。
 
-1. 已安装 Python 3.11+，并在当前项目创建、离线安装好 `.venv`。
-2. 已安装 Ollama，或准备好 `runtime\ollama\ollama.exe`。
-3. `qwen3:0.6b` 已迁移到离线电脑，`ollama list` 能看到该模型。
-4. 已安装 LD6002C 测试底板使用的 CP210x Windows 驱动。
-5. 可选安装 `ffplay.exe`；缺失时仅禁用电脑语音，不影响雷达、AI、日志和大屏。
-
-双击入口：
+完整离线交付目录必须另外携带以下构建产物；它们是 U 盘交付载荷，不进入普通 Git 历史：
 
 ```text
-WINDOWS_CHECK.bat   只检查离线环境，不启动系统
-START_WINDOWS.bat   自动检测并启动整套演示
-STOP_WINDOWS.bat    只停止本项目启动的进程
+wheelhouse/       Windows CPython 3.11 第三方依赖 wheel
+project-wheel/    ld6002c_fall_detection-*.whl
+models/           qwen3:0.6b 的 Ollama manifests 和 blobs
 ```
 
-`START_WINDOWS.bat` 会检查项目 `.venv`、Ollama API 和模型，自动识别 CP210x/CP2104 对应的 `COMx`，检查串口占用，随后分别打开雷达业务窗口和 AI Live Monitor 窗口；确认 `http://127.0.0.1:8501` 可访问后才打开浏览器。若未检测到真实雷达，可在提示中输入 `M` 切换现有 Mock Fall Demo，继续完成课程录制。
+第一次部署：
 
-脚本不会执行 `pip install`、`ollama pull`、`winget`、`choco`、`git pull` 或其他联网安装，也不会永久修改 ExecutionPolicy 和系统 PATH。固定 COM 口或修改端口时，可复制 `deploy\windows\config.example.cmd` 为 `config.cmd`；本地配置和 `data\windows-runtime` PID 状态均被 Git 忽略。
+```text
+1. 安装 Python 3.11 x64
+2. 安装 Ollama Windows
+3. 复制完整离线项目目录
+4. 双击 INSTALL_WINDOWS_OFFLINE.bat
+5. 等待 INSTALLATION COMPLETE
+```
 
-完整离线准备、串口选择、Ollama 查找顺序、PID 停止规则及故障排查见 [Windows 部署说明](deploy/windows/README.md)。
+以后每次录课先插入 LD6002C，再双击 `START_WINDOWS.bat`。其他入口如下：
+
+```text
+INSTALL_WINDOWS_OFFLINE.bat   创建 .venv、离线安装 wheel、导入并验证模型
+WINDOWS_CHECK.bat             只检查离线环境，不启动系统
+START_WINDOWS.bat             自动检测并启动整套演示
+STOP_WINDOWS.bat              只停止本项目启动的进程
+```
+
+安装器只接受 Python 3.11 x64，只从 `wheelhouse/` 和 `project-wheel/` 安装，使用 `--no-index` 禁止访问包索引；模型安全合并到 `OLLAMA_MODELS` 或 `%USERPROFILE%\.ollama\models`，不会删除已有模型。若 `.venv` 损坏，可在命令提示符运行 `INSTALL_WINDOWS_OFFLINE.bat -Repair` 重建。
+
+`START_WINDOWS.bat` 会检查项目 `.venv`、必要时启动 Ollama、确认模型、识别 CP210x/CP2104 对应的 `COMx`，随后启动雷达服务和 AI Live Monitor；页面可访问后才打开浏览器。若没有真实雷达，可输入 `M` 切换 Mock Fall Demo。ffplay 缺失只会禁用电脑语音。
+
+所有 Windows 脚本都不会执行在线安装、模型下载或永久修改 ExecutionPolicy / 系统 PATH。固定 COM 口、模型仓库或服务端口时，可复制 `deploy\windows\config.example.cmd` 为 `config.cmd`。完整准备方法、模型验证、停止规则和故障排查见 [Windows 部署说明](deploy/windows/README.md)。
 
 ## 启动速查
 

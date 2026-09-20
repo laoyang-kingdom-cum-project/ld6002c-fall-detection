@@ -9,12 +9,14 @@ WINDOWS_DIR = ROOT / "deploy" / "windows"
 
 def test_windows_entrypoints_and_runtime_scripts_exist() -> None:
     expected = (
+        ROOT / "INSTALL_WINDOWS_OFFLINE.bat",
         ROOT / "START_WINDOWS.bat",
         ROOT / "STOP_WINDOWS.bat",
         ROOT / "WINDOWS_CHECK.bat",
         WINDOWS_DIR / "start.ps1",
         WINDOWS_DIR / "stop.ps1",
         WINDOWS_DIR / "doctor.ps1",
+        WINDOWS_DIR / "install-offline.ps1",
         WINDOWS_DIR / "run-service.ps1",
         WINDOWS_DIR / "common.ps1",
         WINDOWS_DIR / "config.example.cmd",
@@ -26,13 +28,13 @@ def test_windows_entrypoints_and_runtime_scripts_exist() -> None:
 
 def test_startup_scripts_do_not_attempt_online_installation() -> None:
     scripts = (
+        ROOT / "INSTALL_WINDOWS_OFFLINE.bat",
         ROOT / "START_WINDOWS.bat",
         ROOT / "STOP_WINDOWS.bat",
         ROOT / "WINDOWS_CHECK.bat",
         *WINDOWS_DIR.glob("*.ps1"),
     )
     forbidden = (
-        "pip install",
         "ollama pull",
         "winget ",
         "choco ",
@@ -42,6 +44,65 @@ def test_startup_scripts_do_not_attempt_online_installation() -> None:
     combined = "\n".join(path.read_text(encoding="utf-8").casefold() for path in scripts)
 
     assert all(command not in combined for command in forbidden)
+
+    runtime_scripts = tuple(path for path in scripts if path.name != "install-offline.ps1")
+    runtime_combined = "\n".join(
+        path.read_text(encoding="utf-8").casefold() for path in runtime_scripts
+    )
+    assert "pip install" not in runtime_combined
+
+
+def test_offline_installer_uses_only_packaged_python_and_model_assets() -> None:
+    script = (WINDOWS_DIR / "install-offline.ps1").read_text(encoding="utf-8")
+    folded = script.casefold()
+
+    assert 'get-command "py.exe"' in folded
+    assert 'prefixarguments @("-3.11")' in folded
+    assert "$probe.info.bits -eq 64" in folded
+    assert "--no-index" in script
+    assert "--disable-pip-version-check" in script
+    assert "--only-binary=:all:" in script
+    assert "--find-links" in script
+    assert '"project-wheel"' in script
+    assert '"ld6002c_fall_detection-*.whl"' in script
+    assert "Get-OllamaModelFileStatus" in script
+    assert "Merge-ModelStore" in script
+    assert "robocopy.exe" in script
+    assert " /E " in script
+    assert "/MIR" not in script
+    assert "ollama pull" not in folded
+
+
+def test_doctor_treats_an_installed_but_stopped_ollama_as_a_warning() -> None:
+    script = (WINDOWS_DIR / "doctor.ps1").read_text(encoding="utf-8")
+
+    assert "Ollama service is currently stopped" in script
+    assert "START_WINDOWS.bat will start it automatically" in script
+    assert "Offline model store" in script
+    assert 'Report-Error ("Ollama API offline' not in script
+
+
+def test_windows_start_requires_the_installed_python_311_x64_environment() -> None:
+    script = (WINDOWS_DIR / "start.ps1").read_text(encoding="utf-8")
+
+    assert "sys.version_info[:2] == (3, 11)" in script
+    assert "struct.calcsize('P') * 8 == 64" in script
+    assert "Run INSTALL_WINDOWS_OFFLINE.bat" in script
+
+
+def test_large_offline_payloads_are_not_tracked_by_default() -> None:
+    ignore_rules = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+    assert "models/" in ignore_rules
+    assert "wheelhouse/" in ignore_rules
+    assert "project-wheel/" in ignore_rules
+
+
+def test_requirements_reference_has_no_builder_absolute_path() -> None:
+    requirements = ROOT / "requirements-win.txt"
+    if requirements.exists():
+        content = requirements.read_text(encoding="utf-8").casefold()
+        assert "ld6002c-fall-detection @ file:" not in content
 
 
 def test_service_runner_uses_the_existing_cli_and_mock_fallback() -> None:

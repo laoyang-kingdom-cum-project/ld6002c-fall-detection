@@ -10,6 +10,8 @@ __pycache__/
 htmlcov/
 
 .venv/
+.builder-venv/
+.offline-test/
 venv/
 env/
 .env
@@ -18,6 +20,11 @@ env/
 *.egg-info/
 build/
 dist/
+
+# Large payloads belong to the USB/offline bundle, not normal Git history.
+models/
+wheelhouse/
+project-wheel/
 
 .DS_Store
 .idea/

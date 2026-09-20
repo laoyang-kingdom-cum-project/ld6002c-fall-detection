@@ -7,6 +7,8 @@ set "LD6002C_PORT="
 @rem Local Ollama settings.
 set "OLLAMA_BASE_URL=http://127.0.0.1:11434"
 set "OLLAMA_MODEL=qwen3:0.6b"
+@rem Optional custom model store. Leave commented to use %USERPROFILE%\.ollama\models.
+@rem set "OLLAMA_MODELS=D:\OllamaModels"
 
 @rem Optional runtime overrides.
 set "LD6002C_BAUDRATE=115200"

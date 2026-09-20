@@ -123,9 +123,9 @@ try {
     if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
         throw ("Project virtual environment is missing: {0}`nRun the Windows offline installation process first." -f $pythonExe)
     }
-    & $pythonExe -c "import sys; assert sys.version_info >= (3, 11); import ld6002c_fall, serial, streamlit"
+    & $pythonExe -c "import struct,sys; assert sys.version_info[:2] == (3, 11) and struct.calcsize('P') * 8 == 64; import ld6002c_fall, serial, streamlit"
     if ($LASTEXITCODE -ne 0) {
-        throw "Python 3.11+, the project package, pyserial, or Streamlit is not ready in .venv."
+        throw "Python 3.11 x64, the project package, pyserial, or Streamlit is not ready in .venv. Run INSTALL_WINDOWS_OFFLINE.bat."
     }
     $pythonVersion = (& $pythonExe -c "import sys; print('.'.join(map(str, sys.version_info[:3])))").Trim()
     Write-Ok "Python $pythonVersion and project package"
@@ -159,7 +159,7 @@ try {
     Write-Step 3 6 "Checking AI model..."
     $modelNames = @(Get-OllamaModelNames $tags)
     if ($modelNames -notcontains $ollamaModel) {
-        throw ("AI model missing: {0}`nPrepare the model on a connected computer and copy the Ollama model store before the lesson. No download was attempted." -f $ollamaModel)
+        throw ("AI model missing: {0}`nRun INSTALL_WINDOWS_OFFLINE.bat with the prepared models directory. No download was attempted." -f $ollamaModel)
     }
     Write-Ok "AI model $ollamaModel"
 
