@@ -15,7 +15,7 @@ dependencies = [
   "pyserial>=3.5",
   "pandas>=2.0",
   "altair>=5.0",
-  "streamlit>=1.30",
+  "streamlit>=1.59,<2",
   "websockets>=12.0"
 ]
 

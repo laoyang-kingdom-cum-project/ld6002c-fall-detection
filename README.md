@@ -4,6 +4,45 @@
 
 > 本项目仅用于教学和演示，不是医疗诊断设备，也不能作为唯一的生命安全保障手段。模拟跌倒必须使用软垫并由同伴保护。
 
+## 环境要求
+
+### 基础环境
+
+| 项目 | 要求与说明 |
+| --- | --- |
+| 操作系统 | 当前开发及硬件联调环境为 Linux。Windows/macOS 需要按系统调整虚拟环境激活命令、串口名称和音频环境，尚未完成完整联调验证。 |
+| Python | **3.11 或更高版本**，需要可用的 `pip` 和 `venv`。执行 `python --version` 确认；如果系统仅提供 `python3`，创建虚拟环境时使用 `python3`。 |
+| Streamlit | 本机大屏使用 **1.59.2**，下方安装命令显式安装此版本。当前页面使用 `st.fragment`、`st.context.theme` 等接口，不能仅按依赖文件中较宽松的 `streamlit>=1.30` 下限准备环境。 |
+| 浏览器 | 需要支持 WebSocket 和 CSS `light-dark()`；后者用于大屏深浅色适配。 |
+| 工作目录 | 从项目根目录运行命令，并确保 `data/` 可写。主程序和大屏应使用同一份项目目录及日志文件。 |
+| 网络 | 首次安装 Python 依赖、下载 Ollama 模型需要访问对应下载源；依赖和模型就绪后，本地 mock/serial 演示无需云端 AI 服务。 |
+
+项目的 Python 依赖由 `pyproject.toml` 管理，安装项目时自动安装：
+
+| 依赖 | 用途 |
+| --- | --- |
+| `pyserial` | 串口通信及设备发现 |
+| `pandas`、`altair` | 日志数据处理、点云投影和 XYZ 轴线图 |
+| `streamlit` | 实时监测大屏 |
+| `websockets` | 旧版 StickS3 通信兼容层，默认不启用服务 |
+| `pytest`（`dev` 可选依赖） | 自动化测试 |
+
+当前本机虚拟环境版本记录：Python `3.14.7`、Streamlit `1.59.2`、pandas `3.0.3`、Altair `6.2.2`、pyserial `3.5`、websockets `16.1`、pytest `9.1.1`。这是环境参考，不是所有依赖的最低版本要求或锁定文件。
+
+### 按功能准备
+
+| 功能 | 额外要求 |
+| --- | --- |
+| 无设备模拟 | `mock` 模式不需要雷达、串口驱动或 StickS3。仅验证状态机和页面时，可关闭 AI 和音频报警。 |
+| 真实雷达 | HLK-LD6002C、配套测试底板、支持数据传输的 USB/Type-C 线；系统需识别 USB-UART 串口，本机底板使用 CP2104。当前用户必须具有串口读写权限，且串口不能同时被其他采集程序占用。 |
+| 本地 AI | 单独安装并启动 Ollama，准备 `qwen3:0.6b` 模型；默认服务地址为 `http://127.0.0.1:11434`。Python 安装命令不会安装 Ollama 或下载模型；不使用 AI 时传入 `--disable-ai`。 |
+| 电脑语音 | 单独安装带 `ffplay` 的 FFmpeg，并确保 `ffplay` 在 `PATH` 中；需要可用的扬声器或耳机，以及项目中的报警音频文件。不播放声音时传入 `--disable-audio-alarm`。 |
+| 原始数据回放 | `replay` 模式需要已采集的 `.bin` 文件，不需要连接雷达。 |
+
+AI 模型需要额外的内存、磁盘空间和推理时间，项目尚未做最低内存或显卡配置基准测试。演示前应在目标电脑上确认模型能够加载、响应时间符合配置的 `--ollama-timeout`，避免只根据 Python 环境安装成功判断 AI 已就绪。
+
+默认端口：Streamlit 大屏为 `8501`，Ollama 为 `11434`；只有显式启用 `--enable-websocket` 时才使用 `8765`。大屏端口已占用时，可用 `python -m streamlit run dashboard/app.py --server.port 8502` 指定其他端口，并打开终端实际输出的 URL。
+
 ## 系统架构
 
 ```text
@@ -66,12 +105,14 @@ ld6002c-fall --mode mock --enable-ai --ollama-model fall-detection-ai
 
 ## 安装
 
-需要 Python 3.11 或更高版本。fish shell：
+在项目根目录执行以下命令，按自己的 shell 选择一组。Ollama 和 FFmpeg 属于系统工具，需要按上面的功能要求单独准备。
+
+fish shell：
 
 ```fish
 python -m venv .venv
 source .venv/bin/activate.fish
-pip install -e '.[dev]'
+python -m pip install -e '.[dev]' 'streamlit==1.59.2'
 ```
 
 bash/zsh：
@@ -79,8 +120,139 @@ bash/zsh：
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+python -m pip install -e '.[dev]' 'streamlit==1.59.2'
 ```
+
+Windows PowerShell：
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e '.[dev]' 'streamlit==1.59.2'
+```
+
+每个新终端都需要激活虚拟环境。只运行项目、不执行测试时，可将 `'.[dev]'` 改为 `.`；当前演示不需要安装旧固件的 `firmware` 可选依赖，也不依赖 Home Assistant 或 Open WebUI。
+
+安装后检查：
+
+```bash
+python --version
+python -m pip check
+python -m streamlit version
+ld6002c-fall --help
+```
+
+## Windows 离线一键启动
+
+Windows 10/11 x64 录课电脑完成以下前置准备后，老师只需双击仓库根目录的 `START_WINDOWS.bat`：
+
+1. 已安装 Python 3.11+，并在当前项目创建、离线安装好 `.venv`。
+2. 已安装 Ollama，或准备好 `runtime\ollama\ollama.exe`。
+3. `qwen3:0.6b` 已迁移到离线电脑，`ollama list` 能看到该模型。
+4. 已安装 LD6002C 测试底板使用的 CP210x Windows 驱动。
+5. 可选安装 `ffplay.exe`；缺失时仅禁用电脑语音，不影响雷达、AI、日志和大屏。
+
+双击入口：
+
+```text
+WINDOWS_CHECK.bat   只检查离线环境，不启动系统
+START_WINDOWS.bat   自动检测并启动整套演示
+STOP_WINDOWS.bat    只停止本项目启动的进程
+```
+
+`START_WINDOWS.bat` 会检查项目 `.venv`、Ollama API 和模型，自动识别 CP210x/CP2104 对应的 `COMx`，检查串口占用，随后分别打开雷达业务窗口和 AI Live Monitor 窗口；确认 `http://127.0.0.1:8501` 可访问后才打开浏览器。若未检测到真实雷达，可在提示中输入 `M` 切换现有 Mock Fall Demo，继续完成课程录制。
+
+脚本不会执行 `pip install`、`ollama pull`、`winget`、`choco`、`git pull` 或其他联网安装，也不会永久修改 ExecutionPolicy 和系统 PATH。固定 COM 口或修改端口时，可复制 `deploy\windows\config.example.cmd` 为 `config.cmd`；本地配置和 `data\windows-runtime` PID 状态均被 Git 忽略。
+
+完整离线准备、串口选择、Ollama 查找顺序、PID 停止规则及故障排查见 [Windows 部署说明](deploy/windows/README.md)。
+
+## 启动速查
+
+以下流程假设已经完成安装。每个终端先进入同一项目根目录，并按上面的 shell 说明激活 `.venv`。**真实监测与 mock 演示二选一运行**，避免多个主程序同时写入默认日志；Streamlit 大屏在另一个终端独立启动。
+
+### 启动前：AI 与语音
+
+要使用 AI，先检查 Ollama 服务：
+
+```bash
+ollama list
+```
+
+若提示连接不上 Ollama，在单独终端运行以下命令并保持该终端开启；服务已运行时跳过，不要重复启动：
+
+```bash
+ollama serve
+```
+
+首次使用且 `ollama list` 中没有目标模型时，在另一个终端下载，然后再次检查：
+
+```bash
+ollama pull qwen3:0.6b
+ollama list
+```
+
+要使用电脑语音，确认以下命令成功，并检查扬声器/耳机和系统音量：
+
+```bash
+ffplay -version
+```
+
+暂时不需要 AI 或语音时，可分别使用 `--disable-ai`、`--disable-audio-alarm`；下方提供不依赖这两个外部服务的演示命令。
+
+### 正常启动：真实雷达监测
+
+终端 1 插好雷达后列出串口：
+
+```bash
+python tools/list_serial_ports.py
+```
+
+将下方引号中的串口路径替换为本机实际输出，再启动真实监测：
+
+```bash
+ld6002c-fall --mode serial \
+  --port "/dev/serial/by-id/替换为实际设备名称" \
+  --baudrate 115200 \
+  --enable-ai \
+  --enable-audio-alarm \
+  --alarm-volume 100
+```
+
+Windows 将 `--port` 改为实际的 `COM3` 等名称；PowerShell 中请将多行命令合并为一行执行。正常监测保留默认疑似/确认阈值 2 秒/5 秒，报警冷却 30 秒。大屏的数据来源应为 `HLK-LD6002C`；具体串口权限和点云说明见“识别串口设备”。
+
+### 演示启动：模拟跌倒
+
+终端 1 使用 AI 和电脑语音进行课程演示：
+
+```bash
+ld6002c-fall --mode mock \
+  --mock-scenario fall-demo \
+  --enable-ai \
+  --enable-audio-alarm \
+  --suspect-seconds 1 \
+  --confirm-seconds 2 \
+  --alarm-volume 100
+```
+
+无设备、无 AI 服务、无音频播放器时，改用以下命令：
+
+```bash
+ld6002c-fall --mode mock --mock-scenario fall-demo --disable-ai --disable-audio-alarm --suspect-seconds 1 --confirm-seconds 2
+```
+
+`fall-demo` 的模拟时间前 10 秒为正常有人，第 10～16 秒产生跌倒信号，之后恢复正常；它不会循环触发跌倒。需要重新演示时，在主程序终端按 `Ctrl+C` 后重新执行命令。该模式的大屏来源应为 `MOCK`；未启用音频时仍会输出控制台报警。
+
+### 启动 Streamlit 大屏
+
+终端 2 执行，适用于上面两种模式：
+
+```bash
+python -m streamlit run dashboard/app.py --server.port 8501
+```
+
+浏览器打开 <http://localhost:8501>。若 8501 已被占用，改用 `--server.port 8502` 并打开 <http://localhost:8502>。大屏读取主程序产生的日志，不会自行启动雷达采集或 mock 数据。
+
+演示时可先打开大屏，再启动 `fall-demo`，避免错过前 10 秒的正常阶段；没有新数据时页面可能提示等待数据或 `DISCONNECTED`。退出时，分别在主程序和大屏终端按 `Ctrl+C`。
 
 ## 实时监测展示大屏
 
@@ -134,8 +306,8 @@ streamlit run dashboard/app.py
 推荐课堂演示顺序：
 
 1. 启动 Ollama，并用 `ollama list` 确认 `qwen3:0.6b` 已安装。
-2. 终端 1 运行 `fall-demo`，观察启动后的正常阶段。
-3. 终端 2 启动 Streamlit，打开实时监测展示大屏。
+2. 终端 2 启动 Streamlit，先打开实时监测展示大屏。
+3. 终端 1 运行 `fall-demo`，观察启动后的正常阶段。
 4. 等待 mock 在第 10 秒进入跌倒信号，观察 `ANALYZING → SUSPECTED_FALL → CONFIRMED_FALL`。
 5. 展示人体点云由直立分布切换为低位横向分布，以及 `FALL_DETECTED`、`ALARM_TRIGGERED` 和原始数据。
 
@@ -162,7 +334,7 @@ ld6002c-fall --mode serial \
 
 `serial` 模式默认发送官方 `0x010E` 命令打开 User log，雷达随后主动上报 `0x0A08` 真实 3D 点云。启动日志出现 `[Radar] 已发送 0x010E` 后，Dashboard 的 Point Cloud 会从 `WAITING` 变为 `TRACKING`；不需要点云时可传入 `--disable-point-cloud`。
 
-Linux 无权限时，先查看设备所属组；本机实测 CP2104 属于 `uucp`：
+Linux 无权限时，先查看设备所属组；本机实测 CP2104 属于 `uucp`。请按 `ls -l` 的实际输出选择组名，其他系统可能使用 `dialout`，不要直接照搬本机组名：
 
 ```fish
 ls -l /dev/ttyUSB0
@@ -249,7 +421,7 @@ ld6002c-fall --mode mock \
 - `0x0F09`：人体存在状态。
 - `0x0A08`：3D 点云，数据区包含目标数，以及每个点的聚类 ID、X/Y/Z 坐标和速度。
 
-帧日志默认写入 `data/fall_log.csv`；状态变化、AI 调用和设备交互事件写入 `data/events.csv`。事件包括 `AI_REQUEST`、`AI_RESPONSE`、`AI_ERROR`、`AI_FALLBACK`、`FALL_SUSPECTED`、`FALL_DETECTED`、`ALARM_TRIGGERED`、`ALARM_CANCELLED`、`DEVICE_CONNECTED`、`DEVICE_DISCONNECTED`。事件会同时保存触发时的原始雷达数据。Streamlit 页面每秒自动读取这两个日志文件，无需手动刷新浏览器。
+帧日志默认写入 `data/fall_log.csv`；状态变化、AI 调用和设备交互事件写入 `data/events.csv`。事件包括 `AI_REQUEST`、`AI_RESPONSE`、`AI_ERROR`、`AI_FALLBACK`、`FALL_SUSPECTED`、`FALL_DETECTED`、`ALARM_TRIGGERED`、`ALARM_CANCELLED`、`DEVICE_CONNECTED`、`DEVICE_DISCONNECTED`。事件会同时保存触发时的原始雷达数据。Streamlit 实时区默认每 2 秒、日志表格每 5 秒自动更新，无需手动刷新浏览器。
 
 帧日志同时记录 `radar_is_fall`、`ai_result`、`ai_label`、`ai_status`、`ai_success`、`ai_cached`、`ai_model`、`ai_inference_ms`、`ai_message`、`final_result`、`device_state`、`ai_work_state`、`ai_trigger`、`point_count` 和 `radar_points`，用于展示“雷达输入 → 本地 AI → Python 状态机 → 最终业务结果”的完整链路。`radar_points` 使用 JSON 保存每个点的聚类 ID、坐标和速度；`ai_cached=true` 表示当前帧复用了最近一次校验结果。旧日志会自动迁移并补充空点云，不会被误标为真实坐标。
 

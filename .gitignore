@@ -25,11 +25,14 @@ dist/
 
 data/*.csv
 !data/.gitkeep
+data/windows-runtime/
 data/raw/*.bin
 data/raw/*.json
 !data/raw/.gitkeep
 
 firmware/sticks3_alarm/include/secrets.h
 firmware/**/.pio/
+
+deploy/windows/config.cmd
 
 tmp/
