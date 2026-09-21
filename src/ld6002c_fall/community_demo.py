@@ -14,7 +14,13 @@ from urllib.request import urlopen
 import webbrowser
 
 from .ai import OllamaFallAI
-from .community import CommunityController, CommunityTelemetryStore
+from .alarm import ConsoleAlarm, DesktopAudioAlarm
+from .community import (
+    CommunityController,
+    CommunityDemoRuntime,
+    CommunityRuntimeHealthStore,
+    CommunityTelemetryStore,
+)
 from .config import (
     DEFAULT_ALARM_SOUND_PATH,
     DEFAULT_ALARM_VOLUME,
@@ -22,9 +28,15 @@ from .config import (
     DEFAULT_COMMUNITY_EVENT_PATH,
     DEFAULT_COMMUNITY_STATE_PATH,
     DEFAULT_COMMUNITY_TELEMETRY_DIR,
+    DEFAULT_COMMUNITY_RUNTIME_PATH,
+    DEFAULT_COMMUNITY_TELEMETRY_INTERVAL,
+    DEFAULT_COMMUNITY_TELEMETRY_MAX_FRAMES,
+    DEFAULT_EVENT_LOG_PATH,
+    DEFAULT_LOG_PATH,
     DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OLLAMA_TIMEOUT,
+    DEFAULT_REAL_TELEMETRY_STALE_SECONDS,
 )
 
 
@@ -63,6 +75,23 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_COMMUNITY_TELEMETRY_DIR,
     )
+    parser.add_argument("--runtime-path", type=Path, default=DEFAULT_COMMUNITY_RUNTIME_PATH)
+    parser.add_argument(
+        "--telemetry-interval",
+        type=float,
+        default=DEFAULT_COMMUNITY_TELEMETRY_INTERVAL,
+    )
+    parser.add_argument(
+        "--telemetry-max-frames",
+        type=int,
+        default=DEFAULT_COMMUNITY_TELEMETRY_MAX_FRAMES,
+    )
+    parser.add_argument(
+        "--real-stale-seconds",
+        type=float,
+        default=DEFAULT_REAL_TELEMETRY_STALE_SECONDS,
+    )
+    parser.add_argument("--real-log-path", type=Path, default=DEFAULT_LOG_PATH)
     parser.add_argument(
         "--reset",
         action="store_true",
@@ -81,10 +110,15 @@ def main() -> None:
             args.state_path,
             args.event_path,
         )
-        telemetry = CommunityTelemetryStore(args.telemetry_dir)
+        telemetry = CommunityTelemetryStore(
+            args.telemetry_dir,
+            max_frames=args.telemetry_max_frames,
+        )
+        health_store = CommunityRuntimeHealthStore(args.runtime_path)
         if args.reset:
             removed_events = controller.reset_demo_state()
             telemetry.clear()
+            health_store.clear()
             print(
                 "Community demo reset complete: "
                 f"removed {removed_events} demo event(s) and all demo telemetry."
@@ -96,24 +130,50 @@ def main() -> None:
                 f"Dashboard port {args.port} is already in use. "
                 "Stop the old Streamlit process or choose --port PORT."
             )
-        ollama_status = _report_ai_status(args)
-        env = _build_environment(args)
-        command = [
-            sys.executable,
-            "-m",
-            "streamlit",
-            "run",
-            str(root / "dashboard" / "app.py"),
-            "--server.address",
-            args.host,
-            "--server.port",
-            str(args.port),
-            "--server.headless",
-            "true",
-        ]
-        process = subprocess.Popen(command, cwd=root, env=env)
-        local_url = f"http://127.0.0.1:{args.port}"
+        ai = (
+            OllamaFallAI(
+                base_url=args.ollama_base_url,
+                model=args.ollama_model,
+                timeout=args.ollama_timeout,
+            )
+            if args.enable_ai
+            else None
+        )
+        alarm = (
+            DesktopAudioAlarm(args.alarm_sound, volume=args.alarm_volume)
+            if args.audio_alarm
+            else ConsoleAlarm()
+        )
+        runtime = CommunityDemoRuntime(
+            controller,
+            telemetry,
+            health_store,
+            ai=ai,
+            alarm=alarm,
+            interval_seconds=args.telemetry_interval,
+            real_log_path=args.real_log_path,
+            real_stale_seconds=args.real_stale_seconds,
+        )
+        process: subprocess.Popen[bytes] | None = None
         try:
+            runtime.start()
+            ollama_status = _report_ai_status(args)
+            env = _build_environment(args)
+            command = [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                str(root / "dashboard" / "app.py"),
+                "--server.address",
+                args.host,
+                "--server.port",
+                str(args.port),
+                "--server.headless",
+                "true",
+            ]
+            process = subprocess.Popen(command, cwd=root, env=env)
+            local_url = f"http://127.0.0.1:{args.port}"
             if not _wait_for_dashboard(local_url, process):
                 raise RuntimeError("Streamlit did not become ready within 30 seconds.")
             _print_ready_urls(
@@ -131,13 +191,14 @@ def main() -> None:
         except KeyboardInterrupt:
             print("\nStopping community demo...")
         finally:
-            if process.poll() is None:
+            if process is not None and process.poll() is None:
                 process.terminate()
                 try:
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
+            runtime.stop()
     except (OSError, RuntimeError, ValueError) as exc:
         raise SystemExit(f"Community demo failed: {exc}") from exc
 
@@ -149,6 +210,12 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("alarm volume must be between 0 and 100")
     if args.ollama_timeout <= 0:
         raise ValueError("ollama timeout must be greater than 0")
+    if args.telemetry_interval <= 0:
+        raise ValueError("telemetry interval must be greater than 0")
+    if args.telemetry_max_frames < 1:
+        raise ValueError("telemetry max frames must be positive")
+    if args.real_stale_seconds <= 0:
+        raise ValueError("real telemetry freshness must be greater than 0")
 
 
 def _find_project_root() -> Path:
@@ -165,18 +232,8 @@ def _report_ai_status(args: argparse.Namespace) -> str:
     if not args.enable_ai:
         print("[AI] disabled; radar result pass-through will be used.")
         return "DISABLED"
-    health = OllamaFallAI(
-        base_url=args.ollama_base_url,
-        model=args.ollama_model,
-        timeout=args.ollama_timeout,
-    ).health_check()
-    if health.connected and health.model_available:
-        print(f"[AI] Ollama connected; model {args.ollama_model} is ready.")
-        return "ONLINE"
-    else:
-        print(f"[AI_FALLBACK] {health.message}")
-        print("[AI_FALLBACK] Demo remains available and will retain the radar result.")
-        return "AI_FALLBACK"
+    print("[AI] Ollama health check is running in the background.")
+    return "CHECKING"
 
 
 def _build_environment(args: argparse.Namespace) -> dict[str, str]:
@@ -194,6 +251,11 @@ def _build_environment(args: argparse.Namespace) -> dict[str, str]:
             "LD6002C_COMMUNITY_STATE_PATH": str(args.state_path.resolve()),
             "LD6002C_COMMUNITY_EVENT_PATH": str(args.event_path.resolve()),
             "LD6002C_COMMUNITY_TELEMETRY_DIR": str(args.telemetry_dir.resolve()),
+            "LD6002C_COMMUNITY_RUNTIME_PATH": str(args.runtime_path.resolve()),
+            "COMMUNITY_TELEMETRY_MAX_FRAMES": str(args.telemetry_max_frames),
+            "REAL_TELEMETRY_STALE_SECONDS": str(args.real_stale_seconds),
+            "LD6002C_LOG_PATH": str(args.real_log_path.resolve()),
+            "LD6002C_EVENT_LOG_PATH": str(DEFAULT_EVENT_LOG_PATH.resolve()),
         }
     )
     return env

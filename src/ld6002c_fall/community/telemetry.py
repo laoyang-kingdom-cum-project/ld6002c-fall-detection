@@ -14,6 +14,7 @@ from ..ai import FallAIResult
 from ..device_protocol import DeviceState
 from ..event_logger import CSVEventLogger, EventName, SystemEvent
 from ..logger import CSVFrameLogger
+from ..config import DEFAULT_COMMUNITY_TELEMETRY_MAX_FRAMES
 from ..mock_reader import MockRadarStatus, build_mock_radar_frame
 from ..radar_model import RadarFrame
 
@@ -27,8 +28,16 @@ class CommunityTelemetryStore:
 
     fieldnames = ["resident_id", *CSVFrameLogger.fieldnames]
 
-    def __init__(self, directory: str | Path) -> None:
+    def __init__(
+        self,
+        directory: str | Path,
+        *,
+        max_frames: int = DEFAULT_COMMUNITY_TELEMETRY_MAX_FRAMES,
+    ) -> None:
+        if max_frames < 1:
+            raise ValueError("max_frames must be positive")
         self.directory = Path(directory)
+        self.max_frames = max_frames
         self.directory.mkdir(parents=True, exist_ok=True)
 
     def frame_path(self, resident_id: str) -> Path:
@@ -108,8 +117,22 @@ class CommunityTelemetryStore:
                 "radar_points": "[]",
             }
         )
-        self._write_rows(self.frame_path(resident_id), [row])
+        self._append_row(self.frame_path(resident_id), row)
         return frame
+
+    def append_frame(
+        self,
+        resident_id: str,
+        frame: RadarFrame,
+        status: MockRadarStatus,
+        ai_result: FallAIResult,
+    ) -> None:
+        """Atomically append one frame while retaining only the rolling window."""
+
+        self._append_row(
+            self.frame_path(resident_id),
+            _frame_row(resident_id, frame, status, ai_result),
+        )
 
     def log_event(
         self,
@@ -139,6 +162,28 @@ class CommunityTelemetryStore:
             path.unlink(missing_ok=True)
 
     def _write_rows(self, path: Path, rows: list[dict[str, object]]) -> None:
+        with _file_lock(path):
+            self._write_rows_unlocked(path, rows)
+
+    def _append_row(self, path: Path, row: dict[str, object]) -> None:
+        with _file_lock(path):
+            rows: list[dict[str, object]] = []
+            if path.exists() and path.stat().st_size > 0:
+                try:
+                    with path.open(newline="", encoding="utf-8") as file:
+                        rows = list(csv.DictReader(file))
+                except (OSError, csv.Error) as exc:
+                    raise RuntimeError(
+                        f"Failed to read community telemetry {path}: {exc}"
+                    ) from exc
+            rows.append(row)
+            self._write_rows_unlocked(path, rows[-self.max_frames :])
+
+    def _write_rows_unlocked(
+        self,
+        path: Path,
+        rows: list[dict[str, object]],
+    ) -> None:
         temporary = path.with_name(
             f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
         )
@@ -154,6 +199,44 @@ class CommunityTelemetryStore:
             raise RuntimeError(f"Failed to write community telemetry {path}: {exc}") from exc
         finally:
             temporary.unlink(missing_ok=True)
+
+
+class _file_lock:
+    """Small cross-process lock used by runtime writers and dashboard readers."""
+
+    def __init__(self, target: Path, timeout: float = 3.0) -> None:
+        self.lock_path = target.with_suffix(f"{target.suffix}.lock")
+        self.timeout = timeout
+        self.descriptor: int | None = None
+
+    def __enter__(self) -> None:
+        import time
+
+        deadline = time.monotonic() + self.timeout
+        while self.descriptor is None:
+            try:
+                self.descriptor = os.open(
+                    self.lock_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                )
+                os.write(self.descriptor, str(os.getpid()).encode("ascii"))
+            except FileExistsError:
+                try:
+                    if time.time() - self.lock_path.stat().st_mtime > 30:
+                        self.lock_path.unlink(missing_ok=True)
+                        continue
+                except FileNotFoundError:
+                    continue
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f"Timed out waiting for telemetry lock {self.lock_path}"
+                    )
+                time.sleep(0.02)
+
+    def __exit__(self, *_args: object) -> None:
+        if self.descriptor is not None:
+            os.close(self.descriptor)
+        self.lock_path.unlink(missing_ok=True)
 
 
 def _frame_row(

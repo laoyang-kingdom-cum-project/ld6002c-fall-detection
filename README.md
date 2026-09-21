@@ -198,7 +198,7 @@ http://127.0.0.1:8501/?view=control
 http://127.0.0.1:8501/?view=technical&resident=B2-302
 ```
 
-第二个地址是演示控制台；同一局域网的手机可使用终端打印的 `http://<电脑局域网 IP>:8501/?view=control`。如 Ollama 不可用，页面仍可演示，但会明确记录 `AI_FALLBACK`。可用 `--no-enable-ai`、`--no-audio-alarm`、`--port 8502` 覆盖默认值。重置所有社区演示状态、演示事件和分住户遥测后退出：
+第二个地址是演示控制台；同一局域网的手机可使用终端打印的 `http://<电脑局域网 IP>:8501/?view=control`。启动器会同时运行社区后台 runtime，默认以 2 Hz 为全部住户持续生成有界滚动遥测，因此无需先打开控制台或手工发送正常数据。如 Ollama 不可用，业务页面继续使用安全规则给出结果，控制台 health 区域和技术事件会记录 `AI_FALLBACK`。可用 `--no-enable-ai`、`--no-audio-alarm`、`--port 8502` 覆盖默认值。重置所有社区演示状态、演示事件、runtime health 和分住户遥测后退出：
 
 ```bash
 ld6002c-community-demo --reset
@@ -301,14 +301,14 @@ python -m streamlit run dashboard/app.py --server.port 8501
 三个 URL 视图共享文件状态，因此电脑展示大屏和手机控制页能看到同一次演示操作：
 
 - **社区监控大屏**：显示监护住户、在线设备、正常住户、当前报警、今日报警，以及 18 户状态矩阵和最近事件。社区数据每 1.5 秒由 `st.fragment` 局部刷新。
-- **演示控制台**：可向任意住户发送正常、跌倒、疑似异常、离线、恢复和报警确认。演示覆盖会保持到点击“恢复正常”，避免录课时被真实雷达的下一帧立即覆盖。
-- **技术详情**：任意住户都复用同一套雷达链路、AI 判断、点云投影、XYZ 趋势、实时数据总线和原始日志渲染器。`B2-302` 无演示覆盖时读取真实 `fall_log.csv`；对它注入演示状态时临时改读分住户模拟遥测，点击“恢复正常”后自动返回真实数据。
+- **演示控制台**：只负责切换任意住户的期望场景，并显示 runtime、Ollama、模型、遥测和报警健康状态。AI 推理、业务状态迁移、遥测与报警均由 launcher 所属 runtime 处理，Streamlit rerun 不会重复报警。
+- **技术详情**：任意住户都复用同一套雷达链路、业务判断、点云投影、XYZ 趋势、实时数据总线和原始日志渲染器，页面本身只读。`B2-302` 仅在 `fall_log.csv` 最后一帧不超过 5 秒且无演示覆盖时使用真实数据；真实日志过期时自动改读带课堂模拟标记的遥测。
 
-“发送跌倒数据”会构造 `is_fall=1`，并调用与真实雷达相同的 `OllamaFallAI`。Qwen3 返回合法结果时记录 `DEMO_AI`；Ollama 不可用或返回非法结构时使用雷达输入安全回退，UI 和技术事件都明确标记 `AI_FALLBACK`。每次动作会原子替换该住户最近 30 帧遥测：正常为竖直人体，疑似异常为中高度，跌倒为低位水平人体。离线状态不再产生新点云，技术页显示 `Radar Link DISCONNECTED`。
+“发送跌倒数据”只写入 `desired_scenario=FALL`。后台 runtime 观察到版本变化后构造 `is_fall=1` 并调用与真实雷达相同的 `OllamaFallAI`；Qwen3 返回合法结果时记录 `DEMO_AI`，不可用或返回非法结构时使用雷达输入安全回退并保留真实 `AI_ERROR` / `AI_FALLBACK` 诊断事件。runtime 每 0.5 秒追加一帧并原子保留最近 60 帧，所以 NORMAL、FALL 和恢复过程会共同留在短期 XYZ 历史中。离线场景只追加一次断开帧，随后停止产生新点云。
 
 电脑语音只在住户首次进入 `FALL` 时触发一次；在状态仍为 `FALL` 时重复点击不会重播。“确认报警”和“恢复正常”都会关闭当前播放；后者还会清除真实住户的演示覆盖。
 
-首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`。状态使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半个 JSON。社区事件写入 `data/community_events.csv`；分住户技术帧与 AI/报警事件写入 `data/community_telemetry/<resident>.csv` 和 `<resident>.events.csv`。
+首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`；`data/community_runtime.json` 保存 heartbeat、Ollama、模型、AI 模式、遥测和报警 health。状态和遥测使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半份数据。社区事件写入 `data/community_events.csv`；分住户技术帧与 AI/报警事件写入 `data/community_telemetry/<resident>.csv` 和 `<resident>.events.csv`。可通过 `COMMUNITY_TELEMETRY_INTERVAL`、`COMMUNITY_TELEMETRY_MAX_FRAMES` 和 `REAL_TELEMETRY_STALE_SECONDS` 调整默认的 0.5 秒、60 帧和 5 秒阈值。
 
 ## 技术详情大屏
 

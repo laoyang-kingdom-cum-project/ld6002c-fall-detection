@@ -182,7 +182,13 @@ class CommunityEventLogger:
 
         if not self.path.exists():
             return 0
-        demo_sources = {"DEMO", "DEMO_AI", "AI_FALLBACK", "COMMUNITY_DEMO"}
+        demo_sources = {
+            "DEMO",
+            "DEMO_AI",
+            "DEMO_REQUEST",
+            "AI_FALLBACK",
+            "COMMUNITY_DEMO",
+        }
         temporary = self.path.with_name(
             f".{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
         )

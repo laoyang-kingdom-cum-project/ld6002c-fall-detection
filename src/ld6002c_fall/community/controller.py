@@ -11,6 +11,7 @@ from .models import (
     CommunityEvent,
     CommunityEventName,
     CommunityStatus,
+    DemoScenario,
     Resident,
     ResidentState,
     local_now,
@@ -142,6 +143,8 @@ class CommunityController:
         ai_success: bool | None = None,
         source: str = "DEMO",
         details: str = "",
+        demo_override: bool = True,
+        applied_scenario_revision: int | None = None,
     ) -> tuple[ResidentState, bool]:
         """Apply a demo value and return the lock-protected fall transition."""
 
@@ -163,7 +166,16 @@ class CommunityController:
                 handled=False if entering_fall else previous.handled,
                 updated_at=now,
                 source=source,
-                demo_override=True,
+                demo_override=demo_override,
+                desired_scenario=(
+                    status if status in {"NORMAL", "WARNING", "FALL", "OFFLINE"}
+                    else previous.desired_scenario
+                ),
+                applied_scenario_revision=(
+                    previous.scenario_revision
+                    if applied_scenario_revision is None
+                    else applied_scenario_revision
+                ),
             )
 
         previous, updated = self.state_store.update(resident_id, apply)
@@ -176,6 +188,32 @@ class CommunityController:
         )
         self._log_transition(resident, previous, updated, source, details)
         return updated, previous.status != "FALL" and updated.status == "FALL"
+
+    def request_demo_scenario(
+        self,
+        resident_id: str,
+        scenario: DemoScenario,
+        *,
+        timestamp: datetime | None = None,
+        demo_override: bool = True,
+    ) -> ResidentState:
+        """Persist an operator request without applying the business transition."""
+
+        self.registry.get(resident_id)
+        now = timestamp or local_now()
+
+        def apply(previous: ResidentState) -> ResidentState:
+            return replace(
+                previous,
+                desired_scenario=scenario,
+                scenario_revision=previous.scenario_revision + 1,
+                updated_at=now,
+                source="DEMO_REQUEST",
+                demo_override=demo_override,
+            )
+
+        _, updated = self.state_store.update(resident_id, apply)
+        return updated
 
     def acknowledge_alarm(
         self,

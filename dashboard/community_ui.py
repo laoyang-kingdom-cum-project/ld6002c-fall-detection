@@ -9,11 +9,9 @@ import os
 import pandas as pd
 import streamlit as st
 
-from ld6002c_fall.ai import OllamaFallAI
-from ld6002c_fall.alarm import AlarmOutput, ConsoleAlarm, DesktopAudioAlarm
 from ld6002c_fall.community import (
     CommunityController,
-    CommunityTelemetryStore,
+    CommunityRuntimeHealthStore,
     DemoAction,
     DemoControlResult,
     DemoControlService,
@@ -21,16 +19,7 @@ from ld6002c_fall.community import (
     ResidentState,
     latest_alarm_resident_id,
 )
-from ld6002c_fall.config import (
-    DEFAULT_ALARM_SOUND_PATH,
-    DEFAULT_ALARM_VOLUME,
-    DEFAULT_AUDIO_ALARM_ENABLED,
-    DEFAULT_COMMUNITY_TELEMETRY_DIR,
-    DEFAULT_AI_ENABLED,
-    DEFAULT_OLLAMA_BASE_URL,
-    DEFAULT_OLLAMA_MODEL,
-    DEFAULT_OLLAMA_TIMEOUT,
-)
+from ld6002c_fall.config import DEFAULT_COMMUNITY_RUNTIME_PATH
 
 
 STATUS_LABELS = {
@@ -73,6 +62,7 @@ def render_demo_console(controller: CommunityController) -> None:
         '<span>演示覆盖会保持到“恢复正常”</span></div>',
         unsafe_allow_html=True,
     )
+    _render_runtime_health()
     residents = controller.registry.residents
     labels = {
         resident.id: f"{resident.address}  {resident.name} · {resident.age}岁"
@@ -256,7 +246,7 @@ def _render_resident_summary(resident: Resident, state: ResidentState) -> None:
         ("姓名 / 年龄", f"{resident.name} · {resident.age}岁"),
         ("雷达判断", radar),
         ("AI 判断", ai),
-        ("模型", state.ai_model or "--"),
+        ("模型", _business_model(state.ai_model)),
         ("报警时间", alarm_time),
         ("处理状态", "已确认" if state.handled else "待处理"),
     )
@@ -332,44 +322,7 @@ def _execute_demo_action(
     resident_id: str,
     action: DemoAction,
 ) -> DemoControlResult:
-    ai_enabled = os.getenv("AI_ENABLED", str(DEFAULT_AI_ENABLED)).strip().lower() in {
-        "1", "true", "yes", "on"
-    }
-    ai = (
-        OllamaFallAI(
-            base_url=os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL),
-            model=os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL),
-            timeout=float(os.getenv("OLLAMA_TIMEOUT", str(DEFAULT_OLLAMA_TIMEOUT))),
-        )
-        if ai_enabled
-        else None
-    )
-    telemetry = CommunityTelemetryStore(
-        os.getenv(
-            "LD6002C_COMMUNITY_TELEMETRY_DIR",
-            str(DEFAULT_COMMUNITY_TELEMETRY_DIR),
-        )
-    )
-    return DemoControlService(
-        controller,
-        ai,
-        telemetry=telemetry,
-        alarm=_community_alarm(),
-    ).execute(resident_id, action)
-
-
-@st.cache_resource
-def _community_alarm() -> AlarmOutput:
-    enabled = os.getenv(
-        "AUDIO_ALARM_ENABLED",
-        str(DEFAULT_AUDIO_ALARM_ENABLED),
-    ).strip().lower() in {"1", "true", "yes", "on"}
-    if not enabled:
-        return ConsoleAlarm()
-    return DesktopAudioAlarm(
-        os.getenv("ALARM_SOUND_PATH", str(DEFAULT_ALARM_SOUND_PATH)),
-        volume=int(os.getenv("ALARM_VOLUME", str(DEFAULT_ALARM_VOLUME))),
-    )
+    return DemoControlService(controller).execute(resident_id, action)
 
 
 def _render_demo_result(result: object) -> None:
@@ -377,7 +330,7 @@ def _render_demo_result(result: object) -> None:
         return
     if result.ai_result is None:
         st.success(
-            f"操作已写入：{result.action} → {STATUS_LABELS[result.state.status]}"
+            f"场景请求已写入：{result.action}，后台监测服务正在应用。"
         )
         return
     message = (
@@ -404,10 +357,43 @@ def _render_demo_state(controller: CommunityController, state: ResidentState) ->
     _render_resident_summary(resident, state)
 
 
+def _render_runtime_health() -> None:
+    health = CommunityRuntimeHealthStore(
+        os.getenv("LD6002C_COMMUNITY_RUNTIME_PATH", str(DEFAULT_COMMUNITY_RUNTIME_PATH))
+    ).read()
+    st.markdown(
+        '<div class="section-heading compact"><div><div class="section-kicker">System Health</div>'
+        '<h2>后台服务状态</h2></div></div>',
+        unsafe_allow_html=True,
+    )
+    columns = st.columns(5, gap="small")
+    values = (
+        ("Community Runtime", health.runtime),
+        ("Ollama", health.ollama),
+        ("Model", health.model),
+        ("Telemetry", health.telemetry),
+        ("Alarm", health.alarm),
+    )
+    for column, (label, value) in zip(columns, values, strict=True):
+        column.metric(label, value)
+    ai_time = _short_time_value(health.last_ai_success or "")
+    st.caption(f"AI Mode: {health.ai_mode} · Last AI response: {ai_time}")
+    if health.last_ai_error:
+        st.warning(f"AI backend: {health.last_ai_error}")
+    if health.last_runtime_error:
+        st.error(f"Runtime: {health.last_runtime_error}")
+
+
 def _result_label(value: int | None) -> str:
     if value is None:
         return "--"
     return "FALL · 1" if value else "NORMAL · 0"
+
+
+def _business_model(value: str | None) -> str:
+    if value in {None, "", "fallback", "disabled", "not-requested"}:
+        return "本地安全规则"
+    return value
 
 
 def _short_time(value: datetime | None) -> str:

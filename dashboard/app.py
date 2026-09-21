@@ -25,13 +25,13 @@ except ModuleNotFoundError as exc:
         render_community_dashboard,
         render_demo_console,
     )
-from ld6002c_fall.ai.ollama_client import disabled_ai_result
 from ld6002c_fall.community import CommunityController, CommunityTelemetryStore
 from ld6002c_fall.config import (
     DEFAULT_COMMUNITY_CONFIG_PATH,
     DEFAULT_COMMUNITY_EVENT_PATH,
     DEFAULT_COMMUNITY_STATE_PATH,
     DEFAULT_COMMUNITY_TELEMETRY_DIR,
+    DEFAULT_REAL_TELEMETRY_STALE_SECONDS,
 )
 from ld6002c_fall.csv_snapshot import CSVSnapshotError, read_csv_tail
 from ld6002c_fall.live_monitor import (
@@ -284,14 +284,6 @@ def _show_technical_detail(
         resident.id,
         telemetry,
     )
-    if use_demo_telemetry and not telemetry.has_frames(resident.id):
-        telemetry.write_scenario(
-            resident.id,
-            "NORMAL",
-            disabled_ai_result(0),
-            timestamp=datetime.now().astimezone(),
-            frame_count=30,
-        )
     st.markdown(
         '<div class="technical-resident-context"><strong>'
         f'{escape(resident.address)} · {escape(resident.name)} · {resident.age}岁</strong>'
@@ -306,12 +298,23 @@ def _technical_data_paths(
     controller: CommunityController,
     resident_id: str,
     telemetry: CommunityTelemetryStore,
+    *,
+    now: datetime | None = None,
+    real_stale_seconds: float = DEFAULT_REAL_TELEMETRY_STALE_SECONDS,
 ) -> tuple[Path, Path, str, bool]:
-    """Select real or demo files from persisted resident override state."""
+    """Select recent real telemetry, otherwise the classroom demo stream."""
 
     resident = controller.registry.get(resident_id)
     state = controller.states()[resident_id]
-    use_demo = state.demo_override or not resident.has_live_sensor
+    use_demo = (
+        state.demo_override
+        or not resident.has_live_sensor
+        or not _telemetry_is_fresh(
+            LOG_PATH,
+            now=now or datetime.now().astimezone(),
+            stale_seconds=real_stale_seconds,
+        )
+    )
     if use_demo:
         return (
             telemetry.frame_path(resident_id),
@@ -320,6 +323,24 @@ def _technical_data_paths(
             True,
         )
     return LOG_PATH, EVENT_LOG_PATH, "HLK-LD6002C · REALTIME", False
+
+
+def _telemetry_is_fresh(
+    path: Path,
+    *,
+    now: datetime,
+    stale_seconds: float,
+) -> bool:
+    if stale_seconds <= 0:
+        raise ValueError("stale_seconds must be greater than 0")
+    try:
+        rows = read_csv_tail(path, max_rows=1)
+        timestamp = datetime.fromisoformat(str(rows[-1]["timestamp"]))
+    except (CSVSnapshotError, FileNotFoundError, OSError, KeyError, IndexError, ValueError):
+        return False
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.astimezone()
+    return abs((now - timestamp).total_seconds()) <= stale_seconds
 
 
 def _install_styles() -> None:
@@ -742,7 +763,7 @@ def _show_live_dashboard(frame_path: Path, event_path: Path) -> None:
 def _render_live_dashboard(frame_path: Path, event_path: Path) -> None:
     frame_data = _read_csv(frame_path)
     if frame_data is None:
-        st.info("还没有监测日志，请先运行 ld6002c-fall 主程序。")
+        st.info("监测服务正在初始化，请稍候查看第一帧数据。")
         return
     if frame_data.empty:
         st.info("监测日志为空，正在等待第一帧雷达数据。")
@@ -804,7 +825,7 @@ def _show_status_bar(snapshot: MonitorSnapshot, cloud_status: str) -> None:
         ("Point Cloud", cloud_status),
         ("System State", snapshot.current_status),
         ("Human", human_status),
-        ("AI Engine", snapshot.ollama_status),
+        ("Intelligent Result", "FALL" if snapshot.fall_detected else "NORMAL"),
         ("Data Source", snapshot.source),
     ]
     cards = "".join(
@@ -1084,10 +1105,12 @@ def _show_ai_panel(
     snapshot: MonitorSnapshot,
     events: list[dict[str, object]],
 ) -> None:
+    decision_source = _business_ai_source(snapshot.ai_model)
+    work_state = _business_ai_state(snapshot.ai_work_state)
     st.markdown(
         '<div class="panel-heading"><div><div class="section-kicker">Local Intelligence</div>'
         '<h2>AI 判断流</h2></div>'
-        f'<span class="panel-note">{escape(snapshot.ai_model)}<br>{escape(snapshot.ai_work_state)}</span></div>',
+        f'<span class="panel-note">{escape(decision_source)}<br>{escape(work_state)}</span></div>',
         unsafe_allow_html=True,
     )
     latest_ai_event = next(
@@ -1128,8 +1151,15 @@ def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
         css_class = ""
         if entry.status in {"FALL_DETECTED", "ALARM_TRIGGERED"}:
             css_class = "danger"
-        elif entry.status in {"ANALYZING", "FALLBACK"}:
+        elif entry.status == "ANALYZING":
             css_class = "warning"
+        status = "规则判定完成" if entry.status == "FALLBACK" else entry.status
+        message = (
+            "本地安全规则已完成判定。"
+            if entry.status == "FALLBACK"
+            else entry.message
+        )
+        model = "本地安全规则" if entry.status == "FALLBACK" else entry.model
         result = "--" if entry.result is None else str(entry.result)
         latency = (
             f"{entry.inference_ms:.1f} ms" if entry.inference_ms is not None else "waiting"
@@ -1137,11 +1167,11 @@ def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
         repeat = f" · merged {entry.occurrences}" if entry.occurrences > 1 else ""
         blocks.append(
             '<div class="ai-entry"><div class="ai-entry-head">'
-            f'<span class="ai-entry-status {css_class}">{escape(entry.status)}</span>'
+            f'<span class="ai-entry-status {css_class}">{escape(status)}</span>'
             f'<span class="ai-entry-time">{escape(_short_time(entry.timestamp))}</span></div>'
-            f'<p>{escape(entry.message)}</p>'
+            f'<p>{escape(message)}</p>'
             f'<div class="ai-entry-meta">input {entry.is_fall} → result {result} · '
-            f'{escape(entry.model)} · {escape(latency)}{escape(repeat)}</div></div>'
+            f'{escape(model)} · {escape(latency)}{escape(repeat)}</div></div>'
         )
     st.markdown("".join(blocks), unsafe_allow_html=True)
 
@@ -1364,6 +1394,20 @@ def _inference(latest: pd.Series) -> str:
         return f"{float(latest.get('ai_inference_ms')):.1f} ms"
     except (TypeError, ValueError):
         return "--"
+
+
+def _business_ai_source(model: str) -> str:
+    return "本地安全规则" if model in {"fallback", "disabled", "not-requested"} else model
+
+
+def _business_ai_state(work_state: str) -> str:
+    return {
+        "FALLBACK": "判定完成",
+        "ERROR": "判定完成",
+        "MONITORING": "持续监测",
+        "FALL_DETECTED": "跌倒已确认",
+        "IDLE": "持续监测",
+    }.get(work_state, work_state)
 
 
 def _short_time(value: str) -> str:

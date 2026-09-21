@@ -8,6 +8,7 @@ from typing import Any, Literal, Mapping
 
 
 CommunityStatus = Literal["NORMAL", "WARNING", "FALL", "OFFLINE", "RECOVERED"]
+DemoScenario = Literal["NORMAL", "WARNING", "FALL", "OFFLINE"]
 CommunityEventName = Literal[
     "FALL_ALERT",
     "ALERT_ACKNOWLEDGED",
@@ -18,6 +19,7 @@ CommunityEventName = Literal[
 ]
 
 VALID_STATUSES = {"NORMAL", "WARNING", "FALL", "OFFLINE", "RECOVERED"}
+VALID_SCENARIOS = {"NORMAL", "WARNING", "FALL", "OFFLINE"}
 
 
 def local_now() -> datetime:
@@ -84,6 +86,9 @@ class ResidentState:
     updated_at: datetime = field(default_factory=local_now)
     source: str = "INITIAL"
     demo_override: bool = False
+    desired_scenario: DemoScenario = "NORMAL"
+    scenario_revision: int = 0
+    applied_scenario_revision: int = 0
 
     def __post_init__(self) -> None:
         if self.status not in VALID_STATUSES:
@@ -92,6 +97,12 @@ class ResidentState:
             raise ValueError("radar_result must be None, 0, or 1")
         if self.ai_result not in (None, 0, 1):
             raise ValueError("ai_result must be None, 0, or 1")
+        if self.desired_scenario not in VALID_SCENARIOS:
+            raise ValueError(f"Unsupported demo scenario: {self.desired_scenario}")
+        if self.scenario_revision < 0 or self.applied_scenario_revision < 0:
+            raise ValueError("scenario revisions must be non-negative")
+        if self.applied_scenario_revision > self.scenario_revision:
+            raise ValueError("applied scenario revision cannot exceed requested revision")
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -106,6 +117,9 @@ class ResidentState:
             "updated_at": _format_datetime(self.updated_at),
             "source": self.source,
             "demo_override": self.demo_override,
+            "desired_scenario": self.desired_scenario,
+            "scenario_revision": self.scenario_revision,
+            "applied_scenario_revision": self.applied_scenario_revision,
         }
 
     @classmethod
@@ -118,6 +132,20 @@ class ResidentState:
         status = str(value.get("status", "NORMAL")).upper()
         if status not in VALID_STATUSES:
             raise ValueError(f"Unsupported community status for {resident_id}: {status}")
+        desired_scenario = str(
+            value.get(
+                "desired_scenario",
+                status if status in VALID_SCENARIOS else "NORMAL",
+            )
+        ).upper()
+        if desired_scenario not in VALID_SCENARIOS:
+            raise ValueError(
+                f"Unsupported demo scenario for {resident_id}: {desired_scenario}"
+            )
+        scenario_revision = _non_negative_int(value.get("scenario_revision", 0))
+        applied_revision = _non_negative_int(
+            value.get("applied_scenario_revision", scenario_revision)
+        )
         return cls(
             resident_id=resident_id,
             status=status,  # type: ignore[arg-type]
@@ -130,6 +158,9 @@ class ResidentState:
             updated_at=_parse_datetime(value.get("updated_at")) or local_now(),
             source=str(value.get("source") or "INITIAL"),
             demo_override=bool(value.get("demo_override", False)),
+            desired_scenario=desired_scenario,  # type: ignore[arg-type]
+            scenario_revision=scenario_revision,
+            applied_scenario_revision=min(applied_revision, scenario_revision),
         )
 
 
@@ -189,3 +220,10 @@ def _optional_text(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _non_negative_int(value: object) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise ValueError(f"Expected non-negative integer, got {value!r}")
+    return parsed
