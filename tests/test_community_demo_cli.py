@@ -6,7 +6,11 @@ import socket
 import sys
 import tomllib
 
-from ld6002c_fall.community import CommunityController, CommunityTelemetryStore
+from ld6002c_fall.community import (
+    CommunityController,
+    CommunityRuntimeHealth,
+    CommunityTelemetryStore,
+)
 from ld6002c_fall.community_demo import (
     _build_environment,
     _port_available,
@@ -107,3 +111,88 @@ def test_pyproject_exposes_community_demo_console_command() -> None:
     assert data["project"]["scripts"]["ld6002c-community-demo"] == (
         "ld6002c_fall.community_demo:main"
     )
+
+
+def test_launcher_starts_runtime_before_streamlit_and_stops_it(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    actions: list[str] = []
+
+    class FakeRuntime:
+        def __init__(self, *_args, **_kwargs) -> None:
+            actions.append("runtime-created")
+
+        def start(self) -> None:
+            actions.append("runtime-started")
+
+        def stop(self) -> None:
+            actions.append("runtime-stopped")
+
+    class FakeProcess:
+        returncode: int | None = None
+
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            actions.append("streamlit-waited")
+            self.returncode = 0
+            return 0
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+        def terminate(self) -> None:
+            actions.append("streamlit-terminated")
+            self.returncode = 0
+
+        def kill(self) -> None:
+            actions.append("streamlit-killed")
+            self.returncode = -9
+
+    def fake_popen(*_args, **_kwargs) -> FakeProcess:
+        actions.append("streamlit-started")
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "ld6002c-community-demo",
+            "--host", "127.0.0.1",
+            "--port", "18501",
+            "--no-enable-ai",
+            "--no-audio-alarm",
+            "--no-open-browser",
+            "--config-path", str(ROOT / "config" / "community.json"),
+            "--state-path", str(tmp_path / "state.json"),
+            "--event-path", str(tmp_path / "events.csv"),
+            "--telemetry-dir", str(tmp_path / "telemetry"),
+            "--runtime-path", str(tmp_path / "runtime.json"),
+        ],
+    )
+    monkeypatch.setattr("ld6002c_fall.community_demo.CommunityDemoRuntime", FakeRuntime)
+    monkeypatch.setattr("ld6002c_fall.community_demo._port_available", lambda *_: True)
+    monkeypatch.setattr("ld6002c_fall.community_demo._wait_for_dashboard", lambda *_: True)
+    monkeypatch.setattr(
+        "ld6002c_fall.community_demo._ready_runtime_health",
+        lambda *_args, **_kwargs: (
+            actions.append("runtime-ready")
+            or CommunityRuntimeHealth(
+                runtime="RUNNING",
+                telemetry="ACTIVE",
+                ollama="DISABLED",
+            )
+        ),
+    )
+    monkeypatch.setattr("ld6002c_fall.community_demo.subprocess.Popen", fake_popen)
+
+    main()
+
+    assert actions == [
+        "runtime-created",
+        "runtime-started",
+        "runtime-ready",
+        "streamlit-started",
+        "streamlit-waited",
+        "runtime-stopped",
+    ]

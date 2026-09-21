@@ -266,17 +266,15 @@ class CommunityDemoRuntime:
         self.health_store.write(self._health)
 
     def _run(self) -> None:
+        first_tick = True
         try:
-            self.tick()
-            self._ready_event.set()
             while not self._stop_event.is_set():
                 started = time.monotonic()
-                remaining = max(0.0, self.interval_seconds - (time.monotonic() - started))
-                if self._stop_event.wait(remaining):
-                    break
                 try:
                     self.tick()
                 except Exception as exc:
+                    if first_tick:
+                        raise
                     self._health = replace(
                         self._health,
                         runtime="DEGRADED",
@@ -285,6 +283,13 @@ class CommunityDemoRuntime:
                         last_runtime_error=str(exc),
                     )
                     self.health_store.write(self._health)
+                if first_tick:
+                    first_tick = False
+                    self._ready_event.set()
+                elapsed = time.monotonic() - started
+                remaining = max(0.0, self.interval_seconds - elapsed)
+                if self._stop_event.wait(remaining):
+                    break
         except Exception as exc:
             self._health = replace(
                 self._health,

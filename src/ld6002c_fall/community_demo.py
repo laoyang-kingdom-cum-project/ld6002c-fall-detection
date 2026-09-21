@@ -18,6 +18,7 @@ from .alarm import ConsoleAlarm, DesktopAudioAlarm
 from .community import (
     CommunityController,
     CommunityDemoRuntime,
+    CommunityRuntimeHealth,
     CommunityRuntimeHealthStore,
     CommunityTelemetryStore,
 )
@@ -157,7 +158,11 @@ def main() -> None:
         process: subprocess.Popen[bytes] | None = None
         try:
             runtime.start()
-            ollama_status = _report_ai_status(args)
+            _report_ai_status(args)
+            runtime_health = _ready_runtime_health(
+                health_store,
+                wait_for_ai=args.enable_ai,
+            )
             env = _build_environment(args)
             command = [
                 sys.executable,
@@ -180,7 +185,9 @@ def main() -> None:
                 local_url,
                 args.host,
                 args.port,
-                ollama_status=ollama_status,
+                runtime_status=runtime_health.runtime,
+                telemetry_status=runtime_health.telemetry,
+                ollama_status=_ready_ollama_status(runtime_health.ollama),
                 model=args.ollama_model,
                 community_name=controller.registry.community_name,
                 resident_count=len(controller.registry.residents),
@@ -291,11 +298,42 @@ def _wait_for_dashboard(url: str, process: subprocess.Popen[bytes]) -> bool:
     return False
 
 
+def _ready_runtime_health(
+    store: CommunityRuntimeHealthStore,
+    *,
+    wait_for_ai: bool,
+    timeout: float = 3.0,
+) -> CommunityRuntimeHealth:
+    """Read definitive runtime health for the launcher READY summary."""
+
+    deadline = time.monotonic() + timeout
+    health = store.read()
+    while (
+        wait_for_ai
+        and health.ollama == "CHECKING"
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.05)
+        health = store.read()
+    if health.runtime != "RUNNING" or health.telemetry != "ACTIVE":
+        raise RuntimeError(
+            "Community runtime was not healthy after startup: "
+            f"runtime={health.runtime}, telemetry={health.telemetry}"
+        )
+    return health
+
+
+def _ready_ollama_status(status: str) -> str:
+    return "FALLBACK" if status == "OFFLINE" else status
+
+
 def _print_ready_urls(
     local_url: str,
     host: str,
     port: int,
     *,
+    runtime_status: str,
+    telemetry_status: str,
     ollama_status: str,
     model: str,
     community_name: str,
@@ -304,13 +342,15 @@ def _print_ready_urls(
     print("\n========================================")
     print(" Community Fall Detection Demo")
     print("========================================\n")
-    print(f"Ollama      : {ollama_status}")
-    print(f"Model       : {model}")
-    print(f"Community   : {community_name}")
-    print(f"Residents   : {resident_count}")
-    print(f"Dashboard   : {local_url}/")
-    print(f"Demo Control: {local_url}/?view=control")
-    print(f"Technical   : {local_url}/?view=technical&resident=B2-302")
+    print(f"Community Runtime : {runtime_status}")
+    print(f"Telemetry         : {telemetry_status}")
+    print(f"Ollama            : {ollama_status}")
+    print(f"Model             : {model}")
+    print(f"Community         : {community_name}")
+    print(f"Residents         : {resident_count}")
+    print(f"Dashboard         : {local_url}/")
+    print(f"Demo Control      : {local_url}/?view=control")
+    print(f"Technical         : {local_url}/?view=technical&resident=B2-302")
     if host in {"0.0.0.0", "::"}:
         lan_ip = _local_ip()
         if lan_ip:

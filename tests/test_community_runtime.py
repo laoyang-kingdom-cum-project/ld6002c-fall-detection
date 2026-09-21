@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import time
 from typing import Any
 from urllib.error import URLError
 
@@ -212,3 +213,66 @@ def test_fall_alarm_is_emitted_once_per_transition(tmp_path) -> None:
 
     assert len(alarm.emitted) == 2
     assert alarm.closed >= 1
+
+
+def test_running_runtime_consumes_fall_request_end_to_end(tmp_path) -> None:
+    ai_calls: list[str] = []
+
+    def transport(url: str, payload: dict[str, Any] | None, _timeout: float):
+        ai_calls.append(url)
+        if url.endswith("/api/tags"):
+            return {"models": [{"name": "qwen3:0.6b"}]}
+        assert payload is not None
+        return {
+            "model": "qwen3:0.6b",
+            "message": {
+                "content": '{"result":1,"label":"FALL","message":"confirmed"}'
+            },
+        }
+
+    alarm = RecordingAlarm()
+    controller, telemetry, runtime = _runtime(
+        tmp_path,
+        ai=OllamaFallAI(transport=transport),
+        alarm=alarm,
+    )
+    runtime.start(ready_timeout=2)
+    try:
+        pending = DemoControlService(controller).execute("B1-101", "FALL").state
+        assert pending.applied_scenario_revision < pending.scenario_revision
+
+        deadline = time.monotonic() + 2
+        state = pending
+        while time.monotonic() < deadline:
+            state = controller.states()["B1-101"]
+            if state.applied_scenario_revision == state.scenario_revision:
+                break
+            time.sleep(0.02)
+
+        rows = _rows(telemetry.frame_path("B1-101"))
+        technical_events = _rows(telemetry.event_path("B1-101"))
+        community_events = controller.recent_events(20)
+        health = runtime.health_store.read()
+        assert state.status == "FALL"
+        assert state.source == "DEMO_AI"
+        assert state.radar_result == 1
+        assert state.ai_result == 1
+        assert state.applied_scenario_revision == state.scenario_revision
+        assert int(rows[-1]["point_count"]) > 0
+        assert rows[-1]["final_result"] == "1"
+        assert {row["event"] for row in technical_events} >= {
+            "AI_REQUEST",
+            "AI_RESPONSE",
+            "FALL_DETECTED",
+            "ALARM_TRIGGERED",
+        }
+        assert "FALL_ALERT" in {row["event"] for row in community_events}
+        assert any(url.endswith("/api/chat") for url in ai_calls)
+        assert len(alarm.emitted) == 1
+        assert health.runtime == "RUNNING"
+        assert health.telemetry == "ACTIVE"
+    finally:
+        runtime.stop()
+
+    assert runtime.is_running is False
+    assert runtime.health_store.read().runtime == "STOPPED"
