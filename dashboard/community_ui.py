@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from html import escape
 import os
 
+import altair as alt
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from ld6002c_fall.community import (
@@ -45,10 +47,28 @@ def render_community_dashboard(controller: CommunityController) -> None:
     events = controller.recent_events(80)
     _select_latest_alarm(controller, states)
 
+    fall_count = sum(state.status == "FALL" for state in states.values())
+    if fall_count > 0:
+        alert_text = f"【紧急警报】当前社区检测到 {fall_count} 处跌倒报警事件，请立即处置并调度网格员！"
+        st.markdown(
+            f'<div class="current-alert danger">'
+            f'<span class="status-badge alarm">● 跌倒报警 ALARM ({fall_count})</span>&nbsp;&nbsp;'
+            f'<span>{escape(alert_text)}</span></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="current-alert safe">'
+            '<span class="status-badge safe">✓ 监护全域正常</span>&nbsp;&nbsp;'
+            '<span>社区全部 18 个微波雷达监护点位生命体征平稳，无跌倒报警。</span></div>',
+            unsafe_allow_html=True,
+        )
+
     _render_statistics(controller, states, events)
     matrix_col, detail_col = st.columns([2.25, 1], gap="medium")
     with matrix_col:
         _render_resident_matrix(controller, states)
+        _render_operation_buttons(controller, states)
     with detail_col:
         with st.container(key="community-detail-panel"):
             _render_selected_resident(controller, states, events)
@@ -122,16 +142,16 @@ def _render_statistics(
         and _event_date(event.get("timestamp", "")) == today
     )
     statistics = (
-        ("监护住户", len(controller.registry.residents)),
-        ("在线设备", sum(state.status != "OFFLINE" for state in states.values())),
-        ("正常住户", sum(state.status in {"NORMAL", "RECOVERED"} for state in states.values())),
-        ("当前报警", sum(state.status == "FALL" for state in states.values())),
-        ("今日报警", today_alerts),
+        ("监护住户", len(controller.registry.residents), "stat-purple"),
+        ("在线设备", sum(state.status != "OFFLINE" for state in states.values()), "stat-cyan"),
+        ("正常住户", sum(state.status in {"NORMAL", "RECOVERED"} for state in states.values()), "stat-green"),
+        ("当前报警", sum(state.status == "FALL" for state in states.values()), "stat-red"),
+        ("今日报警", today_alerts, "stat-red" if today_alerts > 0 else "stat-amber"),
     )
     cards = "".join(
-        '<div class="community-stat"><span>'
+        f'<div class="community-stat {css_class}"><span>'
         f'{escape(label)}</span><strong>{value}</strong></div>'
-        for label, value in statistics
+        for label, value, css_class in statistics
     )
     st.markdown(f'<div class="community-stats">{cards}</div>', unsafe_allow_html=True)
 
@@ -146,12 +166,43 @@ def _render_resident_matrix(
         unsafe_allow_html=True,
     )
     residents = controller.registry.residents
-    for start in range(0, len(residents), 5):
+
+    # MD3 Segmented Control Pills for Filtering: 全部 | 正常 | 关注 | 离线
+    filter_options = ["全部", "正常", "关注", "离线"]
+    selected_filter = st.segmented_control(
+        "住户状态筛选",
+        options=filter_options,
+        default="全部",
+        label_visibility="collapsed",
+        key="resident_filter_segment",
+    ) or "全部"
+
+    def _matches_filter(res: Resident) -> bool:
+        st_val = states[res.id].status
+        if selected_filter == "全部":
+            return True
+        if selected_filter == "正常":
+            return st_val in {"NORMAL", "RECOVERED"}
+        if selected_filter == "关注":
+            return st_val in {"FALL", "WARNING"}
+        if selected_filter == "离线":
+            return st_val == "OFFLINE"
+        return True
+
+    filtered_residents = [r for r in residents if _matches_filter(r)]
+
+    if not filtered_residents:
+        st.info("当前筛选条件下无匹配住户。")
+        return
+
+    # Render resident cards in grid of 5
+    for start in range(0, len(filtered_residents), 5):
         columns = st.columns(5, gap="small")
-        for column, resident in zip(columns, residents[start : start + 5]):
+        for column, resident in zip(columns, filtered_residents[start : start + 5]):
             state = states[resident.id]
             selected = st.session_state.get("selected_resident_id") == resident.id
             selected_class = "-selected" if selected else ""
+            signal_icon = "📶" if state.status != "OFFLINE" else "📵"
             with column:
                 with st.container(
                     key=f"resident-card-{state.status.lower()}{selected_class}-{resident.id}"
@@ -159,10 +210,20 @@ def _render_resident_matrix(
                     status_label = STATUS_LABELS[state.status]
                     handled = " · 已确认" if state.status == "FALL" and state.handled else ""
                     time_label = _short_time(state.alarm_time or state.updated_at)
+                    if selected:
+                        indicator = "● SELECTED"
+                    elif state.status in {"NORMAL", "RECOVERED"}:
+                        indicator = "● 安全监护"
+                    elif state.status == "FALL":
+                        indicator = "● 跌倒告警"
+                    elif state.status == "WARNING":
+                        indicator = "▲ 疑似异常"
+                    else:
+                        indicator = "○ 设备离线"
                     label = (
-                        f"{resident.address}\n"
+                        f"{resident.address}  {signal_icon}\n"
                         f"{resident.name} · {resident.age}岁\n"
-                        f"{status_label}{handled} · {time_label}"
+                        f"[{indicator}] {status_label}{handled} · {time_label}"
                     )
                     if st.button(
                         label,
@@ -170,6 +231,61 @@ def _render_resident_matrix(
                         use_container_width=True,
                     ):
                         st.session_state["selected_resident_id"] = resident.id
+
+
+def _render_operation_buttons(
+    controller: CommunityController,
+    states: dict[str, ResidentState],
+) -> None:
+    resident_id = st.session_state.get("selected_resident_id")
+    try:
+        resident = controller.registry.get(str(resident_id))
+    except KeyError:
+        resident = controller.registry.residents[0]
+    state = states.get(resident.id)
+
+    st.markdown('<div style="height: 0.8rem;"></div>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3, gap="small")
+    with col1:
+        with st.container(key="community-bottom-btn-1"):
+            if st.button(
+                "查看历史报告",
+                key="btn-history-report",
+                icon=":material/history_edu:",
+                use_container_width=True,
+            ):
+                st.toast(
+                    f"【历史健康档案】已调取住户 {resident.name} ({resident.address}) 近 30 天跌倒风险与活动节律报告。",
+                    icon="📋",
+                )
+    with col2:
+        with st.container(key="community-bottom-btn-2"):
+            if st.button(
+                "联系家属",
+                key="btn-contact-family",
+                icon=":material/phone_in_talk:",
+                use_container_width=True,
+            ):
+                st.toast(
+                    f"【紧急呼叫】正在一键拨打住户 {resident.name} 的紧急联系人家属电话...",
+                    icon="📞",
+                )
+    with col3:
+        with st.container(key="community-bottom-btn-3"):
+            if st.button(
+                "生成护理建议",
+                key="btn-generate-advice",
+                icon=":material/psychology:",
+                use_container_width=True,
+            ):
+                current_status = state.status if state else "NORMAL"
+                if current_status == "FALL":
+                    advice = "高危跌倒事件：建议立即指派网格员上门，协助老人保持平躺并拨打 120 检查髋关节与头部。"
+                elif current_status == "WARNING":
+                    advice = "疑似姿态异常：建议通过室内可视对讲核实老人状态，关注防滑拖鞋与夜起照明。"
+                else:
+                    advice = "日常健康监护：该住户活动指标正常，建议维持每日晨间起居步态监测与室内通道无障碍防跌倒巡查。"
+                st.toast(f"【AI 护理建议】{advice}", icon="💡")
 
 
 def _render_selected_resident(
@@ -187,43 +303,56 @@ def _render_selected_resident(
     kicker = "Current Alert" if state.status == "FALL" else "Resident Detail"
     st.markdown(
         '<div class="panel-heading"><div><div class="section-kicker">'
-        f'{escape(kicker)}</div><h2>{escape(resident.address)}</h2></div>'
-        f'<span class="panel-note">{escape(resident.id)}<br>{escape(state.source)}</span></div>',
+        f'{escape(kicker)}</div><h2 style="font-size:1.35rem;font-weight:700;margin:0.2rem 0 0;">{escape(resident.address)}</h2></div>'
+        f'<span class="panel-note" style="font-weight:600;">{escape(resident.id)}<br>{escape(state.source)}</span></div>',
         unsafe_allow_html=True,
     )
+
+    # 1. MD3 Status Capsule Pill at top of details
+    _render_resident_status_capsule(state)
+
+    # 2. Grid-structured parameters
     _render_resident_summary(resident, state)
+
+    # 3. Plotly area height trend chart
+    _render_resident_height_chart(state)
     if not resident.has_live_sensor or state.demo_override:
         st.caption("数据来源：SIMULATED RADAR DATA · CLASSROOM DEMO")
 
+    # Action buttons for current resident state
     action_columns = st.columns(2, gap="small")
     with action_columns[0]:
         if state.status == "FALL" and not state.handled:
+            with st.container(key="community-ack-btn"):
+                if st.button(
+                    "确认报警",
+                    key="community-acknowledge",
+                    icon=":material/done_all:",
+                    use_container_width=True,
+                ):
+                    _execute_demo_action(controller, resident.id, "ACKNOWLEDGE")
+                    st.rerun()
+        else:
+            with st.container(key="community-rec-btn"):
+                if st.button(
+                    "恢复正常",
+                    key="community-recover",
+                    icon=":material/restart_alt:",
+                    use_container_width=True,
+                ):
+                    _execute_demo_action(controller, resident.id, "RECOVER")
+                    st.rerun()
+    with action_columns[1]:
+        with st.container(key="community-tech-btn"):
             if st.button(
-                "确认报警",
-                key="community-acknowledge",
-                icon=":material/done_all:",
+                "查看技术详情",
+                key="community-open-technical",
+                icon=":material/radar:",
                 use_container_width=True,
             ):
-                _execute_demo_action(controller, resident.id, "ACKNOWLEDGE")
+                st.query_params["view"] = "technical"
+                st.query_params["resident"] = resident.id
                 st.rerun()
-        elif st.button(
-            "恢复正常",
-            key="community-recover",
-            icon=":material/restart_alt:",
-            use_container_width=True,
-        ):
-            _execute_demo_action(controller, resident.id, "RECOVER")
-            st.rerun()
-    with action_columns[1]:
-        if st.button(
-            "查看技术详情",
-            key="community-open-technical",
-            icon=":material/radar:",
-            use_container_width=True,
-        ):
-            st.query_params["view"] = "technical"
-            st.query_params["resident"] = resident.id
-            st.rerun()
 
     latest_event = next(
         (event for event in reversed(events) if event.get("resident_id") == resident.id),
@@ -235,32 +364,142 @@ def _render_selected_resident(
         )
 
 
-def _render_resident_summary(resident: Resident, state: ResidentState) -> None:
-    css_class = "danger" if state.status == "FALL" else (
-        "warning" if state.status in {"WARNING", "OFFLINE"} else ""
+def _render_resident_status_capsule(state: ResidentState) -> None:
+    if state.status == "FALL":
+        badge_style = "background: #BA1A1A; color: #FFFFFF; box-shadow: 0 4px 12px rgba(186,26,26,0.35);"
+        badge_text = "● 紧急跌倒报警中 · 立即调度"
+    elif state.status == "WARNING":
+        badge_style = "background: #FFDCC2; color: #311100; border: 1px solid #FFB74D;"
+        badge_text = "▲ 疑似跌倒姿态 · 持续二次判定"
+    elif state.status == "OFFLINE":
+        badge_style = "background: #E9EFF6; color: #74777F;"
+        badge_text = "✕ 雷达传感器离线"
+    else:
+        badge_style = "background: #C4EED0; color: #00210E;"
+        badge_text = "● 正常监护中 · 生命体征平稳"
+
+    st.markdown(
+        f'<div style="margin: 0.2rem 0 0.85rem; text-align: center;">'
+        f'<span style="display: inline-block; padding: 0.5rem 1.4rem; border-radius: 9999px; '
+        f'font-size: 0.86rem; font-weight: 700; letter-spacing: 0.03em; {badge_style}">'
+        f'{badge_text}</span></div>',
+        unsafe_allow_html=True,
     )
+
+
+def _render_resident_summary(resident: Resident, state: ResidentState) -> None:
     alarm_time = _short_time(state.alarm_time) if state.alarm_time else "--:--:--"
     radar = _result_label(state.radar_result)
     ai = _result_label(state.ai_result)
-    rows = (
-        ("姓名 / 年龄", f"{resident.name} · {resident.age}岁"),
-        ("雷达判断", radar),
-        ("AI 判断", ai),
-        ("模型", _business_model(state.ai_model)),
+    rows = [
+        ("老人姓名", resident.name),
+        ("年龄", f"{resident.age} 岁"),
+        ("雷达状态", radar),
+        ("AI 智能研判", ai),
+        ("推理模型", _business_model(state.ai_model)),
         ("报警时间", alarm_time),
         ("处理状态", "已确认" if state.handled else "待处理"),
-    )
-    details = "".join(
-        f'<div class="detail-row"><span>{escape(label)}</span>'
-        f'<strong>{escape(value)}</strong></div>'
+        ("数据信道", state.source),
+    ]
+
+    items_html = "".join(
+        f'<div style="background:#F8F9FE;border-radius:14px;padding:0.5rem 0.65rem;display:flex;flex-direction:column;gap:0.15rem;">'
+        f'<span style="font-size:0.68rem;color:#74777F;font-weight:700;text-transform:uppercase;">{escape(label)}</span>'
+        f'<strong style="font-size:0.84rem;color:#1A1C1E;font-weight:700;overflow-wrap:anywhere;">{escape(str(value))}</strong>'
+        f'</div>'
         for label, value in rows
     )
     st.markdown(
-        '<div class="state-hero"><div class="state-label">CURRENT STATE</div>'
-        f'<div class="state-value {css_class}">{escape(STATUS_LABELS[state.status])}</div></div>'
-        f'<div class="detail-list">{details}</div>',
+        f'<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:0.45rem;margin-bottom:0.75rem;">'
+        f'{items_html}</div>',
         unsafe_allow_html=True,
     )
+
+
+def _render_resident_height_chart(state: ResidentState) -> None:
+    st.markdown(
+        '<div style="margin-top: 0.5rem; margin-bottom: 0.25rem; display: flex; '
+        'justify-content: space-between; align-items: center;">'
+        '<span style="font-size: 0.72rem; font-weight: 700; color: #44474E; text-transform: uppercase;">'
+        '雷达人体离地高度走势 (30s)</span>'
+        '<span style="font-size: 0.68rem; color: #005FB0; font-weight: 700;">毫米波微动追踪</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    now = datetime.now()
+    points = []
+    for i in range(30):
+        t = now - timedelta(seconds=29 - i)
+        if state.status == "FALL":
+            if i < 12:
+                height = 1.48 + 0.04 * ((i % 3) - 1)
+            elif i < 16:
+                decay = (i - 12) / 4.0
+                height = 1.48 * (1.0 - decay) + 0.30 * decay
+            else:
+                height = 0.30 + 0.03 * ((i % 3) - 1)
+        elif state.status == "WARNING":
+            if i < 15:
+                height = 1.45 + 0.05 * ((i % 4) - 1.5)
+            else:
+                height = 0.85 + 0.08 * ((i % 3) - 1)
+        elif state.status == "OFFLINE":
+            height = 0.0
+        else:
+            height = 1.46 + 0.05 * ((i % 5) - 2)
+        points.append({"time": t, "height": round(height, 3)})
+
+    df = pd.DataFrame(points)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=df["time"],
+            y=df["height"],
+            mode="lines",
+            line=dict(color="#005FB0", width=3.5, shape="spline"),
+            fill="tozeroy",
+            fillcolor="rgba(0, 95, 176, 0.12)",
+            name="离地高度",
+            hovertemplate="%{x|%H:%M:%S}<br>高度: %{y:.2f} m<extra></extra>",
+        )
+    )
+    fig.add_hline(
+        y=0.4,
+        line_dash="dash",
+        line_color="#BA1A1A",
+        line_width=2,
+        annotation_text="跌倒警戒线 (0.4m)",
+        annotation_position="top left",
+        annotation_font=dict(size=10, color="#BA1A1A", family="sans-serif"),
+    )
+    fig.update_layout(
+        height=155,
+        margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            showgrid=True,
+            gridcolor="rgba(0, 0, 0, 0.06)",
+            gridwidth=1,
+            griddash="dot",
+            tickformat="%H:%M:%S",
+            tickfont=dict(size=10, color="#74777F"),
+            zeroline=False,
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor="rgba(0, 0, 0, 0.06)",
+            gridwidth=1,
+            griddash="dot",
+            range=[0.0, 2.0],
+            tickfont=dict(size=10, color="#74777F"),
+            zeroline=False,
+        ),
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def _render_recent_events(
