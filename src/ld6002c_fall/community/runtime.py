@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import json
 import os
@@ -19,7 +19,7 @@ from ..event_logger import EventName
 from ..mock_reader import MockRadarStatus, build_mock_radar_frame
 from ..radar_model import RadarFrame
 from .controller import CommunityController
-from .models import DemoScenario, ResidentState, local_now
+from .models import DemoResponseMode, DemoScenario, ResidentState, local_now
 from .telemetry import CommunityTelemetryStore
 
 
@@ -34,7 +34,45 @@ class CommunityRuntimeHealth:
     last_ai_error: str | None = None
     telemetry: str = "STARTING"
     alarm: str = "READY"
+    demo_response_mode: str = "DIRECT"
     last_runtime_error: str | None = None
+
+
+@dataclass(frozen=True)
+class SimulatedAITrace:
+    """Presentation-only AI steps emitted after a DIRECT transition is applied."""
+
+    scenario: DemoScenario
+    radar_result: int
+    result: int
+    display_model: str
+
+    def steps(self) -> tuple[tuple[EventName, int, str], ...]:
+        outcome = "FALL · 1" if self.result else "NORMAL · 0"
+        confirmation: tuple[EventName, str]
+        if self.scenario == "FALL":
+            confirmation = ("FALL_CONFIRMED", "跌倒报警")
+        elif self.scenario == "WARNING":
+            confirmation = ("WARNING_CONFIRMED", "疑似异常，继续观察")
+        else:
+            confirmation = ("NORMAL_CONFIRMED", "正常状态确认")
+        fusion_message = (
+            "多源结果一致，进入跌倒报警"
+            if self.scenario == "FALL"
+            else "多源演示结果完成融合"
+        )
+        return (
+            ("RADAR_INPUT", 0, "毫米波数据接收"),
+            ("FEATURE_EXTRACTED", 70, "人体姿态与运动特征提取"),
+            ("AI_REQUEST_SIMULATED", 140, "本地智能分析（演示链路）"),
+            (
+                "AI_RESULT_SIMULATED",
+                210,
+                f"{self.display_model} 展示结果：{outcome}",
+            ),
+            ("FUSION_RESULT", 280, fusion_message),
+            (confirmation[0], 350, confirmation[1]),
+        )
 
 
 class CommunityRuntimeHealthStore:
@@ -91,11 +129,15 @@ class CommunityDemoRuntime:
         real_log_path: str | Path | None = None,
         real_stale_seconds: float = 5.0,
         health_check_seconds: float = 15.0,
+        demo_response_mode: DemoResponseMode = "DIRECT",
+        simulated_model: str = "qwen3:0.6b",
     ) -> None:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be greater than 0")
         if real_stale_seconds <= 0 or health_check_seconds <= 0:
             raise ValueError("freshness intervals must be greater than 0")
+        if demo_response_mode not in {"DIRECT", "AI"}:
+            raise ValueError("demo_response_mode must be DIRECT or AI")
         self.controller = controller
         self.telemetry = telemetry
         self.health_store = health_store
@@ -105,6 +147,8 @@ class CommunityDemoRuntime:
         self.real_log_path = Path(real_log_path) if real_log_path else None
         self.real_stale_seconds = real_stale_seconds
         self.health_check_seconds = health_check_seconds
+        self.demo_response_mode = demo_response_mode
+        self.simulated_model = simulated_model
         self._stop_event = threading.Event()
         self._ready_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -115,6 +159,7 @@ class CommunityDemoRuntime:
             ai_mode="AI" if ai is not None else "DISABLED",
             ollama="CHECKING" if ai is not None else "DISABLED",
             alarm=_alarm_status(alarm),
+            demo_response_mode=demo_response_mode,
         )
         self._last_results: dict[str, FallAIResult] = {}
         self._active_scenarios: dict[str, DemoScenario] = {}
@@ -327,16 +372,41 @@ class CommunityDemoRuntime:
         timestamp: datetime,
     ) -> ResidentState:
         scenario = requested.desired_scenario
+        response_mode = requested.demo_response_mode or self.demo_response_mode
+        self._health = replace(
+            self._health,
+            demo_response_mode=response_mode,
+        )
         radar_result = int(scenario in {"WARNING", "FALL"})
-        if scenario in {"NORMAL", "FALL"}:
-            result = disabled_ai_result(radar_result) if self.ai is None else self.ai.predict(
-                FallAIRequest(radar_result),
-                force=True,
+        applied_status: DemoScenario
+        if response_mode == "DIRECT":
+            ai_result = int(scenario == "FALL")
+            result = FallAIResult(
+                result=ai_result,
+                label="FALL" if ai_result else "NORMAL",
+                message="管理员指定状态已即时应用；AI 分析流为教学演示。",
+                model="demo-direct",
+                inference_ms=0.0,
+                success=False,
+            )
+            self._last_results[requested.resident_id] = result
+            applied_status = scenario
+            source = "DEMO_DIRECT"
+            ai_model = "demo-direct"
+            ai_success = False
+        elif scenario in {"NORMAL", "FALL"}:
+            result = (
+                disabled_ai_result(radar_result)
+                if self.ai is None
+                else self.ai.predict(
+                    FallAIRequest(radar_result),
+                    force=True,
+                )
             )
             self._last_results[requested.resident_id] = result
             if self.ai is not None:
                 self._log_ai_events(requested.resident_id, timestamp, radar_result, result)
-            applied_status: DemoScenario = "FALL" if result.result else "NORMAL"
+            applied_status = "FALL" if result.result else "NORMAL"
             source = (
                 "DEMO_RULE"
                 if self.ai is None
@@ -379,6 +449,7 @@ class CommunityDemoRuntime:
             demo_override=requested.demo_override,
             applied_scenario_revision=requested.scenario_revision,
         )
+        event_source = "DEMO_DIRECT" if response_mode == "DIRECT" else None
         if entering_fall:
             frame = self._transition_frame(requested.resident_id, "FALL", timestamp)
             self._log_event(
@@ -388,6 +459,7 @@ class CommunityDemoRuntime:
                 "CONFIRMED_FALL",
                 "Community demo fall confirmed",
                 frame.raw,
+                source=event_source,
             )
             self._log_event(
                 requested.resident_id,
@@ -396,12 +468,25 @@ class CommunityDemoRuntime:
                 "CONFIRMED_FALL",
                 "Desktop audio alarm triggered once on fall transition",
                 frame.raw,
+                source=event_source,
             )
             self._alarm_residents.add(requested.resident_id)
             if self.alarm is not None:
                 self.alarm.emit(frame, "确认跌倒")
         elif previous_status == "FALL" and state.status != "FALL":
-            self._close_alarm(requested.resident_id, timestamp)
+            self._close_alarm(
+                requested.resident_id,
+                timestamp,
+                source=event_source,
+            )
+        if response_mode == "DIRECT" and scenario != "OFFLINE":
+            self._log_simulated_ai_trace(
+                requested.resident_id,
+                timestamp,
+                scenario,
+                radar_result,
+                ai_result,
+            )
         return state
 
     def _transition_frame(
@@ -417,7 +502,13 @@ class CommunityDemoRuntime:
             resident_id=resident_id,
         )
 
-    def _close_alarm(self, resident_id: str, timestamp: datetime) -> None:
+    def _close_alarm(
+        self,
+        resident_id: str,
+        timestamp: datetime,
+        *,
+        source: str | None = None,
+    ) -> None:
         self._alarm_residents.discard(resident_id)
         if self.alarm is not None and not self._alarm_residents:
             self.alarm.close()
@@ -427,7 +518,55 @@ class CommunityDemoRuntime:
             timestamp,
             "CANCELLED",
             "Fall condition cleared",
+            source=source,
         )
+
+    def _log_simulated_ai_trace(
+        self,
+        resident_id: str,
+        timestamp: datetime,
+        scenario: DemoScenario,
+        radar_result: int,
+        result: int,
+    ) -> None:
+        trace = SimulatedAITrace(
+            scenario=scenario,
+            radar_result=radar_result,
+            result=result,
+            display_model=self.simulated_model,
+        )
+        state: DeviceState = {
+            "NORMAL": "NORMAL",
+            "WARNING": "SUSPECTED_FALL",
+            "FALL": "CONFIRMED_FALL",
+            "OFFLINE": "DISCONNECTED",
+        }[scenario]
+        for event, offset_ms, message in trace.steps():
+            details = json.dumps(
+                {
+                    "source": "DEMO_DIRECT",
+                    "ai_mode": "SIMULATED",
+                    "ai_success": False,
+                    "simulated": True,
+                    "step": event,
+                    "message": message,
+                    "is_fall": radar_result,
+                    "result": result,
+                    "model": "demo-direct",
+                    "display_model": self.simulated_model,
+                    "visual_offset_ms": offset_ms,
+                    "simulated_elapsed_ms": 350 if offset_ms == 350 else None,
+                },
+                ensure_ascii=False,
+            )
+            self._log_event(
+                resident_id,
+                event,
+                timestamp + timedelta(milliseconds=offset_ms),
+                state,
+                details,
+                source="DEMO_DIRECT",
+            )
 
     def _log_ai_events(
         self,
@@ -474,6 +613,8 @@ class CommunityDemoRuntime:
         state: DeviceState,
         details: str,
         raw: str = "",
+        *,
+        source: str | None = None,
     ) -> None:
         self.telemetry.log_event(
             resident_id,
@@ -482,6 +623,7 @@ class CommunityDemoRuntime:
             state=state,
             details=details,
             raw=raw,
+            source=source,
         )
 
     def _real_data_is_fresh(self, now: datetime) -> bool:

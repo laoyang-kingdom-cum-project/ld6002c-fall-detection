@@ -155,6 +155,30 @@ def test_ai_chat_uses_real_events_and_merges_periodic_normal_checks() -> None:
     assert chat[-1].is_fall == 1
 
 
+def test_ai_chat_keeps_simulated_trace_distinct_from_real_ai_response() -> None:
+    details = (
+        '{"source":"DEMO_DIRECT","ai_mode":"SIMULATED",'
+        '"ai_success":false,"simulated":true,"is_fall":1,"result":1,'
+        '"display_model":"qwen3:0.6b","message":"本地智能分析（演示链路）",'
+        '"simulated_elapsed_ms":350}'
+    )
+
+    chat = build_ai_chat(
+        [
+            event("AI_REQUEST_SIMULATED", details),
+            event("FALL_CONFIRMED", details),
+        ]
+    )
+
+    assert [entry.status for entry in chat] == [
+        "AI_REQUEST_SIMULATED",
+        "FALL_CONFIRMED",
+    ]
+    assert all(entry.simulated for entry in chat)
+    assert all(entry.trigger == "demo_direct" for entry in chat)
+    assert chat[-1].simulated_elapsed_ms == 350
+
+
 def test_point_history_parses_coordinates_and_marks_latest_cloud() -> None:
     frames = [
         frame(

@@ -9,6 +9,7 @@ from typing import Any, Literal, Mapping
 
 CommunityStatus = Literal["NORMAL", "WARNING", "FALL", "OFFLINE", "RECOVERED"]
 DemoScenario = Literal["NORMAL", "WARNING", "FALL", "OFFLINE"]
+DemoResponseMode = Literal["DIRECT", "AI"]
 CommunityEventName = Literal[
     "FALL_ALERT",
     "ALERT_ACKNOWLEDGED",
@@ -20,6 +21,7 @@ CommunityEventName = Literal[
 
 VALID_STATUSES = {"NORMAL", "WARNING", "FALL", "OFFLINE", "RECOVERED"}
 VALID_SCENARIOS = {"NORMAL", "WARNING", "FALL", "OFFLINE"}
+VALID_DEMO_RESPONSE_MODES = {"DIRECT", "AI"}
 
 
 def local_now() -> datetime:
@@ -87,6 +89,7 @@ class ResidentState:
     source: str = "INITIAL"
     demo_override: bool = False
     desired_scenario: DemoScenario = "NORMAL"
+    demo_response_mode: DemoResponseMode | None = None
     scenario_revision: int = 0
     applied_scenario_revision: int = 0
 
@@ -99,6 +102,13 @@ class ResidentState:
             raise ValueError("ai_result must be None, 0, or 1")
         if self.desired_scenario not in VALID_SCENARIOS:
             raise ValueError(f"Unsupported demo scenario: {self.desired_scenario}")
+        if (
+            self.demo_response_mode is not None
+            and self.demo_response_mode not in VALID_DEMO_RESPONSE_MODES
+        ):
+            raise ValueError(
+                f"Unsupported demo response mode: {self.demo_response_mode}"
+            )
         if self.scenario_revision < 0 or self.applied_scenario_revision < 0:
             raise ValueError("scenario revisions must be non-negative")
         if self.applied_scenario_revision > self.scenario_revision:
@@ -118,6 +128,7 @@ class ResidentState:
             "source": self.source,
             "demo_override": self.demo_override,
             "desired_scenario": self.desired_scenario,
+            "demo_response_mode": self.demo_response_mode,
             "scenario_revision": self.scenario_revision,
             "applied_scenario_revision": self.applied_scenario_revision,
         }
@@ -146,6 +157,12 @@ class ResidentState:
         applied_revision = _non_negative_int(
             value.get("applied_scenario_revision", scenario_revision)
         )
+        response_mode_value = _optional_text(value.get("demo_response_mode"))
+        response_mode = response_mode_value.upper() if response_mode_value else None
+        if response_mode is not None and response_mode not in VALID_DEMO_RESPONSE_MODES:
+            raise ValueError(
+                f"Unsupported demo response mode for {resident_id}: {response_mode}"
+            )
         return cls(
             resident_id=resident_id,
             status=status,  # type: ignore[arg-type]
@@ -159,6 +176,7 @@ class ResidentState:
             source=str(value.get("source") or "INITIAL"),
             demo_override=bool(value.get("demo_override", False)),
             desired_scenario=desired_scenario,  # type: ignore[arg-type]
+            demo_response_mode=response_mode,  # type: ignore[arg-type]
             scenario_revision=scenario_revision,
             applied_scenario_revision=min(applied_revision, scenario_revision),
         )

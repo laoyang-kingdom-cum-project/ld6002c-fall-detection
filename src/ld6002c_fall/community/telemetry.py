@@ -143,13 +143,14 @@ class CommunityTelemetryStore:
         state: DeviceState,
         details: str,
         raw: str = "",
+        source: str | None = None,
     ) -> None:
         CSVEventLogger(self.event_path(resident_id)).log(
             SystemEvent(
                 timestamp=timestamp,
                 event=event,
                 state=state,
-                source=SIMULATED_SOURCE,
+                source=source or SIMULATED_SOURCE,
                 details=details,
                 raw=raw,
             )
@@ -256,11 +257,14 @@ def _frame_row(
         "FALL": "CONFIRMED_FALL",
     }[status]
     final_result = int(status == "FALL" and ai_result.result == 1)
-    ai_status = (
-        "AI_SUCCESS"
-        if ai_result.success
-        else ("AI_DISABLED" if ai_result.model in {"disabled", "not-requested"} else "AI_FALLBACK")
-    )
+    if ai_result.model == "demo-direct":
+        ai_status = "AI_SIMULATED"
+    elif ai_result.success:
+        ai_status = "AI_SUCCESS"
+    elif ai_result.model in {"disabled", "not-requested"}:
+        ai_status = "AI_DISABLED"
+    else:
+        ai_status = "AI_FALLBACK"
     ai_work_state = (
         "FALL_DETECTED"
         if final_result

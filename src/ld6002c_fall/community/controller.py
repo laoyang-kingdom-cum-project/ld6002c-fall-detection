@@ -11,6 +11,7 @@ from .models import (
     CommunityEvent,
     CommunityEventName,
     CommunityStatus,
+    DemoResponseMode,
     DemoScenario,
     Resident,
     ResidentState,
@@ -196,6 +197,7 @@ class CommunityController:
         *,
         timestamp: datetime | None = None,
         demo_override: bool = True,
+        response_mode: DemoResponseMode | None = None,
     ) -> ResidentState:
         """Persist an operator request without applying the business transition."""
 
@@ -206,6 +208,7 @@ class CommunityController:
             return replace(
                 previous,
                 desired_scenario=scenario,
+                demo_response_mode=response_mode,
                 scenario_revision=previous.scenario_revision + 1,
                 updated_at=now,
                 source="DEMO_REQUEST",

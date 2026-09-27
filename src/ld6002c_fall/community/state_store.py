@@ -185,6 +185,7 @@ class CommunityEventLogger:
         demo_sources = {
             "DEMO",
             "DEMO_AI",
+            "DEMO_DIRECT",
             "DEMO_REQUEST",
             "AI_FALLBACK",
             "COMMUNITY_DEMO",

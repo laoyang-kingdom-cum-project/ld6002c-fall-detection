@@ -16,6 +16,7 @@ from ld6002c_fall.community import (
     CommunityRuntimeHealthStore,
     CommunityTelemetryStore,
     DemoControlService,
+    DemoResponseMode,
 )
 from ld6002c_fall.radar_model import RadarFrame
 
@@ -43,6 +44,8 @@ def _runtime(
     max_frames: int = 60,
     ai: OllamaFallAI | None = None,
     alarm: AlarmOutput | None = None,
+    response_mode: DemoResponseMode = "DIRECT",
+    interval_seconds: float = 0.5,
 ) -> tuple[CommunityController, CommunityTelemetryStore, CommunityDemoRuntime]:
     controller = CommunityController.from_paths(
         ROOT / "config" / "community.json",
@@ -59,7 +62,8 @@ def _runtime(
         CommunityRuntimeHealthStore(tmp_path / "community_runtime.json"),
         ai=ai,
         alarm=alarm,
-        interval_seconds=0.5,
+        interval_seconds=interval_seconds,
+        demo_response_mode=response_mode,
     )
     return controller, telemetry, runtime
 
@@ -85,10 +89,16 @@ def test_first_runtime_tick_prewarms_all_residents_without_buttons(tmp_path) -> 
 def test_demo_control_only_requests_scenario_and_does_not_write_telemetry(tmp_path) -> None:
     controller, telemetry, _ = _runtime(tmp_path)
 
-    result = DemoControlService(controller).execute("B1-101", "FALL", timestamp=BASE)
+    result = DemoControlService(controller).execute(
+        "B1-101",
+        "FALL",
+        timestamp=BASE,
+        response_mode="DIRECT",
+    )
 
     assert result.state.status == "NORMAL"
     assert result.state.desired_scenario == "FALL"
+    assert result.state.demo_response_mode == "DIRECT"
     assert result.state.scenario_revision == 1
     assert not telemetry.frame_path("B1-101").exists()
     source = (ROOT / "dashboard" / "app.py").read_text(encoding="utf-8")
@@ -146,10 +156,15 @@ def test_ai_offline_keeps_business_result_and_records_control_health(tmp_path) -
         raise URLError("offline")
 
     ai = OllamaFallAI(transport=offline)
-    controller, telemetry, runtime = _runtime(tmp_path, ai=ai)
+    controller, telemetry, runtime = _runtime(tmp_path, ai=ai, response_mode="AI")
     runtime.tick(BASE)
     runtime.refresh_ai_health()
-    DemoControlService(controller).execute("B3-101", "FALL", timestamp=BASE)
+    DemoControlService(controller).execute(
+        "B3-101",
+        "FALL",
+        timestamp=BASE,
+        response_mode="AI",
+    )
     runtime.tick(BASE + timedelta(seconds=0.5))
 
     rows = _rows(telemetry.frame_path("B3-101"))
@@ -215,6 +230,98 @@ def test_fall_alarm_is_emitted_once_per_transition(tmp_path) -> None:
     assert alarm.closed >= 1
 
 
+def test_direct_fall_skips_ai_and_applies_state_telemetry_trace_and_alarm(
+    tmp_path,
+) -> None:
+    ai_calls: list[str] = []
+
+    def transport(url: str, _payload: dict[str, Any] | None, _timeout: float):
+        ai_calls.append(url)
+        time.sleep(1.0)
+        return {"models": [{"name": "qwen3:0.6b"}]}
+
+    alarm = RecordingAlarm()
+    controller, telemetry, runtime = _runtime(
+        tmp_path,
+        ai=OllamaFallAI(transport=transport),
+        alarm=alarm,
+        response_mode="DIRECT",
+    )
+    runtime.tick(BASE)
+    DemoControlService(controller).execute(
+        "B1-101",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=0.5),
+        response_mode="DIRECT",
+    )
+
+    started = time.perf_counter()
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    elapsed = time.perf_counter() - started
+
+    state = controller.states()["B1-101"]
+    rows = _rows(telemetry.frame_path("B1-101"))
+    events = _rows(telemetry.event_path("B1-101"))
+    community_events = controller.recent_events(20)
+    event_names = [row["event"] for row in events]
+    trace_rows = [row for row in events if row["event"].endswith("SIMULATED")]
+    assert ai_calls == []
+    assert elapsed < 0.75
+    assert state.status == "FALL"
+    assert state.source == "DEMO_DIRECT"
+    assert state.radar_result == state.ai_result == 1
+    assert state.ai_model == "demo-direct"
+    assert state.ai_success is False
+    assert int(rows[-1]["point_count"]) > 0
+    assert rows[-1]["ai_status"] == "AI_SIMULATED"
+    assert rows[-1]["final_result"] == "1"
+    assert len(alarm.emitted) == 1
+    assert any(
+        row["event"] == "FALL_ALERT" and row["source"] == "DEMO_DIRECT"
+        for row in community_events
+    )
+    assert "AI_REQUEST" not in event_names
+    assert "AI_RESPONSE" not in event_names
+    assert "AI_REQUEST_SIMULATED" in event_names
+    assert "AI_RESULT_SIMULATED" in event_names
+    assert "FALL_CONFIRMED" in event_names
+    assert trace_rows and {row["source"] for row in trace_rows} == {"DEMO_DIRECT"}
+    assert all('"ai_mode": "SIMULATED"' in row["details"] for row in trace_rows)
+
+
+def test_running_direct_runtime_consumes_request_within_one_tick(tmp_path) -> None:
+    alarm = RecordingAlarm()
+    controller, telemetry, runtime = _runtime(
+        tmp_path,
+        alarm=alarm,
+        response_mode="DIRECT",
+        interval_seconds=0.05,
+    )
+    runtime.start(ready_timeout=2)
+    try:
+        started = time.perf_counter()
+        pending = DemoControlService(controller).execute(
+            "B1-102",
+            "FALL",
+            response_mode="DIRECT",
+        ).state
+        state = pending
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            state = controller.states()["B1-102"]
+            if state.applied_scenario_revision == state.scenario_revision:
+                break
+            time.sleep(0.005)
+        elapsed = time.perf_counter() - started
+
+        assert state.status == "FALL"
+        assert elapsed < 0.5
+        assert int(_rows(telemetry.frame_path("B1-102"))[-1]["point_count"]) > 0
+        assert len(alarm.emitted) == 1
+    finally:
+        runtime.stop()
+
+
 def test_running_runtime_consumes_fall_request_end_to_end(tmp_path) -> None:
     ai_calls: list[str] = []
 
@@ -235,10 +342,15 @@ def test_running_runtime_consumes_fall_request_end_to_end(tmp_path) -> None:
         tmp_path,
         ai=OllamaFallAI(transport=transport),
         alarm=alarm,
+        response_mode="AI",
     )
     runtime.start(ready_timeout=2)
     try:
-        pending = DemoControlService(controller).execute("B1-101", "FALL").state
+        pending = DemoControlService(controller).execute(
+            "B1-101",
+            "FALL",
+            response_mode="AI",
+        ).state
         assert pending.applied_scenario_revision < pending.scenario_revision
 
         deadline = time.monotonic() + 2

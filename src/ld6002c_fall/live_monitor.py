@@ -38,6 +38,20 @@ class AIChatEntry:
     trigger: str
     inference_ms: float | None = None
     occurrences: int = 1
+    simulated: bool = False
+    simulated_elapsed_ms: float | None = None
+
+
+SIMULATED_AI_TRACE_EVENTS = {
+    "RADAR_INPUT",
+    "FEATURE_EXTRACTED",
+    "AI_REQUEST_SIMULATED",
+    "AI_RESULT_SIMULATED",
+    "FUSION_RESULT",
+    "FALL_CONFIRMED",
+    "WARNING_CONFIRMED",
+    "NORMAL_CONFIRMED",
+}
 
 
 @dataclass(frozen=True)
@@ -141,16 +155,48 @@ def build_monitor_snapshot(
 def build_ai_chat(events: Iterable[Row], *, max_items: int = 100) -> list[AIChatEntry]:
     """Pair real AI requests and outcomes, merging repeated normal checks."""
 
+    event_rows = list(events)
+    has_simulated_trace = any(
+        _text(event.get("event")) in SIMULATED_AI_TRACE_EVENTS
+        for event in event_rows
+    )
     entries: list[AIChatEntry] = []
     pending: dict[str, object] | None = None
     pending_timestamp = ""
     error_message = ""
 
-    for event in events:
+    for event in event_rows:
         name = _text(event.get("event"))
         details = _details(event.get("details"))
         timestamp = _text(event.get("timestamp"))
+        if name in SIMULATED_AI_TRACE_EVENTS:
+            entries.append(
+                AIChatEntry(
+                    timestamp=timestamp,
+                    is_fall=_as_int(details.get("is_fall")),
+                    result=_as_int(details.get("result")),
+                    status=name,
+                    model=(
+                        _text(details.get("display_model"))
+                        or _text(details.get("model"))
+                        or "demo-direct"
+                    ),
+                    message=_text(details.get("message")) or name,
+                    trigger="demo_direct",
+                    simulated=True,
+                    simulated_elapsed_ms=_as_float(
+                        details.get("simulated_elapsed_ms")
+                    ),
+                )
+            )
+            continue
         if name in {"ALARM_TRIGGERED", "ALARM_CANCELLED"}:
+            if (
+                has_simulated_trace
+                and name == "ALARM_TRIGGERED"
+                and _text(event.get("source")) == "DEMO_DIRECT"
+            ):
+                continue
             entries.append(
                 AIChatEntry(
                     timestamp=timestamp,
@@ -436,6 +482,8 @@ def _current_status(device_state: str, human_present: bool) -> str:
 
 
 def _ollama_status(ai_status: str, work_state: str) -> str:
+    if ai_status == "AI_SIMULATED":
+        return "SIMULATED"
     if ai_status == "AI_DISABLED" or work_state == "IDLE":
         return "DISABLED"
     if ai_status == "AI_FALLBACK" or work_state in {"ERROR", "FALLBACK"}:

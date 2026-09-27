@@ -105,6 +105,7 @@ def test_windows_community_demo_uses_offline_environment_and_local_model() -> No
     assert '"-m", "ld6002c_fall.community_demo"' in script
     assert '"--host", "0.0.0.0"' in script
     assert '"--enable-ai"' in script
+    assert '"--demo-response-mode", "direct"' in script
     assert "ollama pull" not in script.casefold()
     assert "pip install" not in script.casefold()
 

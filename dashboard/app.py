@@ -39,6 +39,7 @@ from ld6002c_fall.live_monitor import (
     AxisHistoryEntry,
     MonitorSnapshot,
     PointHistoryEntry,
+    SIMULATED_AI_TRACE_EVENTS,
     SensorStreamEntry,
     build_ai_chat,
     build_axis_history,
@@ -65,10 +66,33 @@ class ThemePalette:
     mode: str
     canvas: str
     surface: str
+    surface_container_low: str
+    surface_container: str
+    surface_container_high: str
+    surface_container_highest: str
     surface_soft: str
     ink: str
     muted: str
     line: str
+    outline: str
+    primary_container: str
+    on_primary: str
+    on_primary_container: str
+    secondary: str
+    secondary_container: str
+    on_secondary_container: str
+    tertiary: str
+    tertiary_container: str
+    on_tertiary_container: str
+    warning: str
+    warning_container: str
+    on_warning_container: str
+    success: str
+    success_container: str
+    on_success_container: str
+    on_error: str
+    error_container: str
+    on_error_container: str
     header_background: str
     terra: str
     sage: str
@@ -76,6 +100,7 @@ class ThemePalette:
     danger: str
     axis_blue: str
     chart_background: str
+    chart_fill: str
     chart_line: str
     chart_axis: str
     chart_grid: str
@@ -87,50 +112,98 @@ class ThemePalette:
 
 LIGHT_PALETTE = ThemePalette(
     mode="light",
-    canvas="#F8F9FE",
-    surface="#FFFFFF",
-    surface_soft="#F3F3FA",
-    ink="#1A1C1E",
+    canvas="#F7F9FF",
+    surface="#FAF8FF",
+    surface_container_low="#F2F3FA",
+    surface_container="#ECEEF5",
+    surface_container_high="#E6E8EF",
+    surface_container_highest="#E0E2E9",
+    surface_soft="#F2F3FA",
+    ink="#1A1C20",
     muted="#44474E",
-    line="#E2E8F0",
-    header_background="rgba(248, 249, 254, 0.98)",
-    terra="#005FB0",
-    sage="#008744",
-    amber="#F59E0B",
+    line="#C4C6D0",
+    outline="#74777F",
+    primary_container="#D9E2FF",
+    on_primary="#FFFFFF",
+    on_primary_container="#2D4578",
+    secondary="#59617A",
+    secondary_container="#DEE5FF",
+    on_secondary_container="#414961",
+    tertiary="#75546F",
+    tertiary_container="#FFD7F5",
+    on_tertiary_container="#5B3C57",
+    warning="#8B5D00",
+    warning_container="#FFDDB1",
+    on_warning_container="#2C1700",
+    success="#50644D",
+    success_container="#D3E8CD",
+    on_success_container="#384B36",
+    on_error="#FFFFFF",
+    error_container="#FFDAD6",
+    on_error_container="#410002",
+    header_background="rgba(247, 249, 255, 0.96)",
+    terra="#455D92",
+    sage="#59617A",
+    amber="#8B5D00",
     danger="#BA1A1A",
-    axis_blue="#0284C7",
-    chart_background="transparent",
-    chart_line="#E7E0EC",
+    axis_blue="#75546F",
+    chart_background="#E6E8EF",
+    chart_fill="rgba(69, 93, 146, 0.14)",
+    chart_line="#C4C6D0",
     chart_axis="#74777F",
-    chart_grid="#E7E0EC",
-    terminal_background="#0B132B",
-    terminal_text="#E2E8F0",
-    terminal_line="#1E293B",
-    terminal_accent="#38BDF8",
+    chart_grid="#C4C6D0",
+    terminal_background="#202328",
+    terminal_text="#E2E2E6",
+    terminal_line="#42474E",
+    terminal_accent="#ADC7FF",
 )
 
 DARK_PALETTE = ThemePalette(
     mode="dark",
-    canvas="#0B132B",
-    surface="#111C38",
-    surface_soft="#172554",
-    ink="#F8FAFC",
-    muted="#94A3B8",
-    line="#1E293B",
-    header_background="rgba(11, 19, 43, 0.96)",
-    terra="#38BDF8",
-    sage="#10B981",
-    amber="#F59E0B",
-    danger="#EF4444",
-    axis_blue="#60A5FA",
-    chart_background="#111C38",
-    chart_line="#1E293B",
-    chart_axis="#94A3B8",
-    chart_grid="#1E293B",
-    terminal_background="#070D1E",
-    terminal_text="#F1F5F9",
-    terminal_line="#1E293B",
-    terminal_accent="#38BDF8",
+    canvas="#111318",
+    surface="#191C20",
+    surface_container_low="#1D2024",
+    surface_container="#212429",
+    surface_container_high="#2B2F33",
+    surface_container_highest="#353A3F",
+    surface_soft="#1D2024",
+    ink="#E2E2E6",
+    muted="#C2C7CE",
+    line="#42474E",
+    outline="#8C9198",
+    primary_container="#2F4778",
+    on_primary="#17305F",
+    on_primary_container="#D9E2FF",
+    secondary="#BEC6E0",
+    secondary_container="#41485F",
+    on_secondary_container="#DAE2FC",
+    tertiary="#DFB8D7",
+    tertiary_container="#594056",
+    on_tertiary_container="#FCD4F4",
+    warning="#E8C17D",
+    warning_container="#4A3820",
+    on_warning_container="#FFDEA6",
+    success="#AACBA4",
+    success_container="#30442F",
+    on_success_container="#C5E8BF",
+    on_error="#690005",
+    error_container="#93000A",
+    on_error_container="#FFDAD6",
+    header_background="rgba(17, 19, 24, 0.96)",
+    terra="#ADC7FF",
+    sage="#BEC6E0",
+    amber="#E8C17D",
+    danger="#FFB4AB",
+    axis_blue="#DFB8D7",
+    chart_background="#2B2F33",
+    chart_fill="rgba(173, 199, 255, 0.18)",
+    chart_line="#42474E",
+    chart_axis="#C2C7CE",
+    chart_grid="#42474E",
+    terminal_background="#15171B",
+    terminal_text="#E2E2E6",
+    terminal_line="#353A3F",
+    terminal_accent="#ADC7FF",
 )
 
 
@@ -146,17 +219,52 @@ def _css_theme_variables() -> str:
     css_fields = (
         ("canvas", "canvas"),
         ("surface", "surface"),
+        ("surface-container-low", "surface_container_low"),
+        ("surface-container", "surface_container"),
+        ("surface-container-high", "surface_container_high"),
+        ("surface-container-highest", "surface_container_highest"),
         ("surface-soft", "surface_soft"),
         ("ink", "ink"),
         ("muted", "muted"),
         ("line", "line"),
+        ("outline", "outline"),
         ("header-bg", "header_background"),
         ("terra", "terra"),
         ("sage", "sage"),
         ("amber", "amber"),
         ("danger", "danger"),
         ("axis-blue", "axis_blue"),
+        ("md3-primary", "terra"),
+        ("md3-on-primary", "on_primary"),
+        ("md3-primary-container", "primary_container"),
+        ("md3-on-primary-container", "on_primary_container"),
+        ("md3-secondary", "secondary"),
+        ("md3-secondary-container", "secondary_container"),
+        ("md3-on-secondary-container", "on_secondary_container"),
+        ("md3-tertiary", "tertiary"),
+        ("md3-tertiary-container", "tertiary_container"),
+        ("md3-on-tertiary-container", "on_tertiary_container"),
+        ("md3-warning", "warning"),
+        ("md3-warning-container", "warning_container"),
+        ("md3-on-warning-container", "on_warning_container"),
+        ("md3-success", "success"),
+        ("md3-success-container", "success_container"),
+        ("md3-on-success-container", "on_success_container"),
+        ("md3-error", "danger"),
+        ("md3-on-error", "on_error"),
+        ("md3-error-container", "error_container"),
+        ("md3-on-error-container", "on_error_container"),
+        ("md3-surface", "surface"),
+        ("md3-surface-container-low", "surface_container_low"),
+        ("md3-surface-container", "surface_container"),
+        ("md3-surface-container-high", "surface_container_high"),
+        ("md3-surface-container-highest", "surface_container_highest"),
+        ("md3-on-surface", "ink"),
+        ("md3-on-surface-variant", "muted"),
+        ("md3-outline", "outline"),
+        ("md3-outline-variant", "line"),
         ("chart-bg", "chart_background"),
+        ("chart-fill", "chart_fill"),
         ("chart-line", "chart_line"),
         ("terminal-bg", "terminal_background"),
         ("terminal-text", "terminal_text"),
@@ -216,9 +324,11 @@ def main() -> None:
     if view == "community":
         _show_community_dashboard(controller)
     elif view == "control":
-        render_demo_console(controller)
+        with st.container(key="community-demo-control"):
+            render_demo_console(controller, asdict(_theme_palette()))
     else:
-        _show_technical_detail(controller, resident_id)
+        with st.container(key="technical-page"):
+            _show_technical_detail(controller, resident_id)
 
 
 def _build_community_controller() -> CommunityController | None:
@@ -255,7 +365,7 @@ def _show_community_dashboard(controller: CommunityController) -> None:
     """Refresh community state without flashing the whole Streamlit page."""
 
     with st.container(key="community-dashboard"):
-        render_community_dashboard(controller)
+        render_community_dashboard(controller, asdict(_theme_palette()))
 
 
 def _show_technical_detail(
@@ -366,22 +476,11 @@ def _install_styles() -> None:
         <style>
         :root {
             /* THEME_VARIABLES */
-            --md3-primary: #005FB0;
-            --md3-surface: #FFFFFF;
-            --md3-surface-container: #E9EFF6;
-            --md3-surface-container-high: #DEE6F2;
-            --md3-on-surface: #1A1C1E;
-            --md3-error-container: #FFDAD6;
-            --md3-on-error-container: #410002;
-            --md3-error: #BA1A1A;
-            --md3-success-container: #C4EED0;
-            --md3-on-success-container: #00210E;
-            --md3-stat-purple: #E8DDFF;
-            --md3-stat-amber: #FFDCC2;
-            --md3-stat-cyan: #CCE8E7;
-            --md3-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.08);
-            --md3-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
-            --md3-shadow-glow: 0 8px 24px rgba(0, 95, 176, 0.3);
+            --md3-motion: 200ms cubic-bezier(0.2, 0, 0, 1);
+            --md3-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --md3-shadow-2: 0 2px 6px rgba(0, 0, 0, 0.18);
+            --md3-state-hover: 8%;
+            --md3-state-pressed: 12%;
         }
         /* 让原生顶栏背景透明，点击穿透，但保留右上角菜单可交互 */
         header[data-testid="stHeader"] {
@@ -399,7 +498,7 @@ def _install_styles() -> None:
             top: 0.5rem !important;
         }
         /* 隐藏 Deploy 部署按钮，保留三点菜单与状态 */
-        .stDeployButton {
+        [data-testid="stAppDeployButton"] {
             display: none !important;
         }
         #MainMenu, footer {
@@ -415,8 +514,8 @@ def _install_styles() -> None:
             max-width: 100% !important;
             overflow-anchor: none;
         }
-        .stApp { background: #F8F9FE; color: var(--md3-on-surface); }
-        [data-testid="stAppViewContainer"] { background: #F8F9FE; }
+        .stApp { background: var(--canvas); color: var(--md3-on-surface); }
+        [data-testid="stAppViewContainer"] { background: var(--canvas); }
         [data-testid="stMain"] { overflow-anchor: none; }
         [data-testid="stStatusWidget"],
         [data-testid="stSpinner"] { display: none !important; }
@@ -429,7 +528,7 @@ def _install_styles() -> None:
         h1 { color: var(--md3-on-surface); font-weight: 700; }
         .wall-header {
             align-items: flex-end;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            border-bottom: 1px solid var(--md3-outline-variant);
             display: flex;
             justify-content: space-between;
             margin-bottom: 0.8rem;
@@ -440,7 +539,7 @@ def _install_styles() -> None:
             font-size: 1.85rem;
             line-height: 1.15;
             margin: 0.25rem 0 0;
-            color: #1A1C1E;
+            color: var(--md3-on-surface);
         }
         .wall-kicker, .section-kicker {
             color: var(--md3-primary);
@@ -451,20 +550,20 @@ def _install_styles() -> None:
         }
         .wall-live {
             align-items: center;
-            color: #44474E;
+            color: var(--md3-on-surface-variant);
             display: flex;
             font-size: 0.76rem;
             font-weight: 700;
             gap: 0.45rem;
             justify-content: flex-end;
             white-space: nowrap;
-            background: var(--md3-surface-container);
+            background: var(--md3-surface-container-low);
             padding: 0.35rem 0.85rem;
             border-radius: 9999px;
             margin-right: 5rem;
         }
         .wall-live span {
-            background: #008744;
+            background: var(--md3-success);
             border-radius: 50%;
             display: inline-block;
             height: 8px;
@@ -482,32 +581,10 @@ def _install_styles() -> None:
             border: none;
             border-radius: 18px;
             padding: 0.85rem 1.1rem;
-            box-shadow: var(--md3-shadow-1);
-            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+            color: var(--md3-on-surface);
         }
-        .community-stat:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--md3-shadow-2);
-        }
-        .community-stat.stat-blue {
-            background: var(--md3-surface-container);
-            color: #1A1C1E;
-        }
-        .community-stat.stat-purple {
-            background: var(--md3-stat-purple);
-            color: #21005D;
-        }
-        .community-stat.stat-amber {
-            background: var(--md3-stat-amber);
-            color: #311100;
-        }
-        .community-stat.stat-cyan {
-            background: var(--md3-stat-cyan);
-            color: #002021;
-        }
-        .community-stat.stat-green {
-            background: var(--md3-success-container);
-            color: var(--md3-on-success-container);
+        .community-stat.stat-normal strong {
+            color: var(--md3-success);
         }
         .community-stat.stat-red {
             background: var(--md3-error-container);
@@ -532,35 +609,55 @@ def _install_styles() -> None:
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             color: inherit;
         }
+        .st-key-community-resident-area,
+        .st-key-community-event-area,
+        .st-key-community-demo-control {
+            background: var(--md3-surface-container-low);
+            border-radius: 24px;
+            padding: 1rem 1.1rem;
+        }
+        .st-key-community-event-area { margin-top: 0.85rem; }
+        .st-key-technical-page { color: var(--md3-on-surface); }
+        .community-action-spacer { height: 0.8rem; }
         .section-heading {
             align-items: baseline;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            border-bottom: 1px solid var(--md3-outline-variant);
             display: flex;
             justify-content: space-between;
             margin-bottom: 0.65rem;
             padding-bottom: 0.45rem;
         }
         .section-heading.compact { margin-top: 0.75rem; }
-        .section-heading h2 { font-size: 1.05rem; font-weight: 700; margin: 0.08rem 0 0; color: #1A1C1E; }
-        .section-heading span { color: #44474E; font-size: 0.72rem; font-weight: 500; }
+        .section-heading h2 { font-size: 1.05rem; font-weight: 700; margin: 0.08rem 0 0; color: var(--md3-on-surface); }
+        .section-heading span { color: var(--md3-on-surface-variant); font-size: 0.72rem; font-weight: 500; }
 
         /* MD3 Resident Matrix Cards */
         div[class*="st-key-resident-card-"] { margin-bottom: 0.4rem; }
         div[class*="st-key-resident-card-"] button {
-            background: #F3F3FA !important;
-            border: 1.5px solid transparent !important;
+            background: var(--md3-surface-container) !important;
+            border: 0 !important;
             border-radius: 20px !important;
-            color: #1A1C1E !important;
+            color: var(--md3-on-surface) !important;
             min-height: 68px !important;
             padding: 0.65rem 0.85rem !important;
             text-align: left !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
-            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+            box-shadow: none !important;
+            transition: background-color var(--md3-motion), color var(--md3-motion), box-shadow var(--md3-motion) !important;
         }
         div[class*="st-key-resident-card-"] button:hover {
-            background: #E9EFF6 !important;
-            box-shadow: var(--md3-shadow-2) !important;
-            transform: translateY(-2px) !important;
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, var(--md3-surface-container)) !important;
+            box-shadow: none !important;
+        }
+        div[class*="st-key-resident-card-"] button:active {
+            background: color-mix(in srgb, var(--md3-on-surface) 12%, var(--md3-surface-container)) !important;
+        }
+        div[class*="st-key-resident-card-"] button:focus-visible {
+            outline: 3px solid var(--md3-primary) !important;
+            outline-offset: 2px !important;
+        }
+        div[class*="st-key-resident-card-"] button:disabled {
+            cursor: not-allowed !important;
+            opacity: 0.38 !important;
         }
         div[class*="st-key-resident-card-"] button p {
             font-size: 0.76rem !important;
@@ -571,145 +668,232 @@ def _install_styles() -> None:
             font-weight: 500 !important;
         }
         div[class*="st-key-resident-card-warning"] button {
-            background: #FFF4E5 !important;
-            border-color: #FFB74D !important;
-            color: #E65100 !important;
+            background: var(--md3-warning-container) !important;
+            color: var(--md3-on-warning-container) !important;
         }
         div[class*="st-key-resident-card-fall"] button {
             background: var(--md3-error-container) !important;
-            border-color: var(--md3-error) !important;
             color: var(--md3-on-error-container) !important;
             animation: clinical-pulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1) !important;
         }
         div[class*="st-key-resident-card-offline"] button {
-            background: #ECEFF1 !important;
-            color: #78909C !important;
-            opacity: 0.85 !important;
+            background: var(--md3-surface-container-high) !important;
+            color: var(--md3-on-surface-variant) !important;
+            opacity: 0.72 !important;
         }
-        /* Active Selected Card: MD3 High Saturation Royal Cobalt Blue with Level 2 Shadow */
+        /* Selected cards use tonal elevation plus a stable leading indicator. */
         div[class*="-selected-"] button {
-            background: var(--md3-primary) !important;
-            border: 2px solid #004785 !important;
-            color: #FFFFFF !important;
-            box-shadow: 0 4px 16px rgba(0, 95, 176, 0.25), var(--md3-shadow-glow) !important;
-            transform: scale(1.02) !important;
+            background: var(--md3-primary-container) !important;
+            color: var(--md3-on-primary-container) !important;
+            box-shadow: inset 4px 0 0 var(--md3-primary) !important;
         }
         div[class*="-selected-"] button:hover {
-            background: #005096 !important;
-            box-shadow: 0 6px 20px rgba(0, 95, 176, 0.35) !important;
-            color: #FFFFFF !important;
+            background: color-mix(in srgb, var(--md3-on-primary-container) 8%, var(--md3-primary-container)) !important;
+            box-shadow: inset 4px 0 0 var(--md3-primary) !important;
+        }
+        div[class*="-selected-"] button:active {
+            background: color-mix(in srgb, var(--md3-on-primary-container) 12%, var(--md3-primary-container)) !important;
+            box-shadow: inset 4px 0 0 var(--md3-primary) !important;
         }
         div[class*="-selected-"] button p {
-            color: #FFFFFF !important;
+            color: inherit !important;
             font-weight: 600 !important;
         }
+        div[class*="st-key-resident-card-warning-selected"] button {
+            background: var(--md3-warning-container) !important;
+            color: var(--md3-on-warning-container) !important;
+            box-shadow: inset 4px 0 0 var(--md3-warning) !important;
+        }
+        div[class*="st-key-resident-card-fall-selected"] button {
+            background: var(--md3-error-container) !important;
+            color: var(--md3-on-error-container) !important;
+            box-shadow: inset 4px 0 0 var(--md3-error) !important;
+        }
+        div[class*="st-key-resident-card-offline-selected"] button {
+            background: var(--md3-surface-container-highest) !important;
+            color: var(--md3-on-surface-variant) !important;
+            box-shadow: inset 4px 0 0 var(--md3-outline) !important;
+            opacity: 1 !important;
+        }
+        div[class*="st-key-resident-card-warning"] button:hover,
+        div[class*="st-key-resident-card-warning-selected"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-warning-container) 8%, var(--md3-warning-container)) !important;
+        }
+        div[class*="st-key-resident-card-warning"] button:active,
+        div[class*="st-key-resident-card-warning-selected"] button:active {
+            background: color-mix(in srgb, var(--md3-on-warning-container) 12%, var(--md3-warning-container)) !important;
+        }
+        div[class*="st-key-resident-card-fall"] button:hover,
+        div[class*="st-key-resident-card-fall-selected"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-error-container) 8%, var(--md3-error-container)) !important;
+        }
+        div[class*="st-key-resident-card-fall"] button:active,
+        div[class*="st-key-resident-card-fall-selected"] button:active {
+            background: color-mix(in srgb, var(--md3-on-error-container) 12%, var(--md3-error-container)) !important;
+        }
+        div[class*="st-key-resident-card-offline"] button:hover,
+        div[class*="st-key-resident-card-offline-selected"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-surface-variant) 8%, var(--md3-surface-container-high)) !important;
+        }
+        div[class*="st-key-resident-card-offline"] button:active,
+        div[class*="st-key-resident-card-offline-selected"] button:active {
+            background: color-mix(in srgb, var(--md3-on-surface-variant) 12%, var(--md3-surface-container-high)) !important;
+        }
 
-        /* MD3 Filter Chips */
+        /* MD3 segmented button */
         div[data-testid="stSegmentedControl"] {
             background: transparent !important;
-            border-radius: 9999px !important;
+            border: 1px solid var(--md3-outline) !important;
+            border-radius: 20px !important;
             padding: 0 !important;
-            gap: 0.5rem !important;
+            gap: 0 !important;
             box-shadow: none !important;
+            overflow: hidden !important;
+            width: fit-content !important;
         }
         div[data-testid="stSegmentedControl"] button {
-            border-radius: 9999px !important;
+            border-radius: 0 !important;
             height: 36px !important;
             min-height: 36px !important;
             padding: 0 16px !important;
             font-size: 0.8rem !important;
             font-weight: 600 !important;
             letter-spacing: 0.01em !important;
-            border: 1px solid #74777F !important;
+            border: 0 !important;
+            border-right: 1px solid var(--md3-outline) !important;
             background: transparent !important;
-            color: #44474E !important;
-            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+            color: var(--md3-on-surface-variant) !important;
+            transition: background-color var(--md3-motion), color var(--md3-motion) !important;
             box-shadow: none !important;
         }
+        div[data-testid="stSegmentedControl"] button:last-of-type {
+            border-right: 0 !important;
+        }
         div[data-testid="stSegmentedControl"] button:hover {
-            background: rgba(68, 71, 78, 0.08) !important;
-            border-color: #44474E !important;
-            color: #1A1C1E !important;
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, transparent) !important;
+            color: var(--md3-on-surface) !important;
+        }
+        div[data-testid="stSegmentedControl"] button:active {
+            background: color-mix(in srgb, var(--md3-on-surface) 12%, transparent) !important;
+        }
+        div[data-testid="stSegmentedControl"] button:focus-visible {
+            outline: 3px solid var(--md3-primary) !important;
+            outline-offset: -3px !important;
+            z-index: 1 !important;
+        }
+        div[data-testid="stSegmentedControl"] button:disabled {
+            opacity: 0.38 !important;
         }
         div[data-testid="stSegmentedControl"] button[aria-selected="true"],
         div[data-testid="stSegmentedControl"] button[data-checked="true"] {
-            background: #DCE2F9 !important;
-            color: #151B2C !important;
-            border: 1px solid transparent !important;
+            background: var(--md3-secondary-container) !important;
+            color: var(--md3-on-secondary-container) !important;
             font-weight: 700 !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+            box-shadow: none !important;
         }
         div[data-testid="stSegmentedControl"] button[aria-selected="true"]::before,
         div[data-testid="stSegmentedControl"] button[data-checked="true"]::before {
             content: "✓ " !important;
             font-weight: 800 !important;
             margin-right: 4px !important;
-            color: #151B2C !important;
+            color: var(--md3-on-secondary-container) !important;
         }
 
         /* MD3 Right Detail Panel */
         .st-key-community-detail-panel {
-            background: #FFFFFF !important;
-            border: 1px solid rgba(0, 0, 0, 0.05) !important;
+            background: var(--md3-surface-container-high) !important;
+            border: 0 !important;
             border-radius: 24px !important;
             min-height: 480px !important;
             padding: 1.5rem !important;
-            box-shadow: var(--md3-shadow-2) !important;
+            box-shadow: none !important;
         }
         .st-key-community-detail-panel .panel-heading {
             margin-bottom: 0.5rem;
             padding-bottom: 0.5rem;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            border-bottom: 1px solid var(--md3-outline-variant);
         }
         .st-key-community-detail-panel .state-hero { padding: 0.4rem 0 0.65rem; }
         .st-key-community-detail-panel .state-value { font-size: 1.45rem; }
-        .st-key-community-detail-panel .detail-row { min-height: 36px; border-bottom: 1px solid rgba(0, 0, 0, 0.05); }
+        .st-key-community-detail-panel .detail-row { min-height: 36px; }
 
-        /* MD3 Large Filled Action Buttons */
+        /* MD3 action button family */
         div[class*="st-key-community-bottom-btn-"] button,
         div[class*="st-key-community-ack-btn"] button,
         div[class*="st-key-community-rec-btn"] button,
-        div[class*="st-key-community-tech-btn"] button {
+        div[class*="st-key-community-tech-btn"] button,
+        div[class*="st-key-demo-action-"] button {
             height: 44px !important;
             min-height: 44px !important;
-            border-radius: 28px !important;
+            border-radius: 22px !important;
             font-weight: 700 !important;
             font-size: 0.82rem !important;
             border: none !important;
             letter-spacing: 0.02em !important;
-            box-shadow: var(--md3-shadow-1) !important;
-            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+            background: var(--md3-secondary-container) !important;
+            color: var(--md3-on-secondary-container) !important;
+            box-shadow: none !important;
+            transition: background-color var(--md3-motion), color var(--md3-motion) !important;
         }
         div[class*="st-key-community-bottom-btn-"] button:hover,
         div[class*="st-key-community-ack-btn"] button:hover,
         div[class*="st-key-community-rec-btn"] button:hover,
-        div[class*="st-key-community-tech-btn"] button:hover {
-            transform: translateY(-2px) !important;
-            box-shadow: var(--md3-shadow-2) !important;
+        div[class*="st-key-community-tech-btn"] button:hover,
+        div[class*="st-key-demo-action-"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-secondary-container) 8%, var(--md3-secondary-container)) !important;
+            box-shadow: none !important;
         }
-        div[class*="st-key-community-bottom-btn-1"] button {
-            background: #E8DDFF !important;
-            color: #21005D !important;
+        div[class*="st-key-community-bottom-btn-"] button:active,
+        div[class*="st-key-community-ack-btn"] button:active,
+        div[class*="st-key-community-rec-btn"] button:active,
+        div[class*="st-key-community-tech-btn"] button:active,
+        div[class*="st-key-demo-action-"] button:active {
+            background: color-mix(in srgb, var(--md3-on-secondary-container) 12%, var(--md3-secondary-container)) !important;
         }
-        div[class*="st-key-community-bottom-btn-2"] button {
-            background: #FFDCC2 !important;
-            color: #311100 !important;
+        div[class*="st-key-community-bottom-btn-"] button:focus-visible,
+        div[class*="st-key-community-ack-btn"] button:focus-visible,
+        div[class*="st-key-community-rec-btn"] button:focus-visible,
+        div[class*="st-key-community-tech-btn"] button:focus-visible,
+        div[class*="st-key-demo-action-"] button:focus-visible {
+            outline: 3px solid var(--md3-primary) !important;
+            outline-offset: 2px !important;
         }
-        div[class*="st-key-community-bottom-btn-3"] button {
-            background: #CCE8E7 !important;
-            color: #002021 !important;
+        div[class*="st-key-community-bottom-btn-"] button:disabled,
+        div[class*="st-key-community-ack-btn"] button:disabled,
+        div[class*="st-key-community-rec-btn"] button:disabled,
+        div[class*="st-key-community-tech-btn"] button:disabled,
+        div[class*="st-key-demo-action-"] button:disabled {
+            opacity: 0.38 !important;
         }
         div[class*="st-key-community-ack-btn"] button {
             background: var(--md3-error) !important;
-            color: #FFFFFF !important;
+            color: var(--md3-on-error) !important;
         }
         div[class*="st-key-community-rec-btn"] button {
-            background: var(--md3-surface-container) !important;
+            background: var(--md3-surface-container-highest) !important;
             color: var(--md3-primary) !important;
         }
         div[class*="st-key-community-tech-btn"] button {
             background: var(--md3-primary) !important;
-            color: #FFFFFF !important;
+            color: var(--md3-on-primary) !important;
+        }
+        div[class*="st-key-community-ack-btn"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-error) 8%, var(--md3-error)) !important;
+        }
+        div[class*="st-key-community-ack-btn"] button:active {
+            background: color-mix(in srgb, var(--md3-on-error) 12%, var(--md3-error)) !important;
+        }
+        div[class*="st-key-community-rec-btn"] button:hover {
+            background: color-mix(in srgb, var(--md3-primary) 8%, var(--md3-surface-container-highest)) !important;
+        }
+        div[class*="st-key-community-rec-btn"] button:active {
+            background: color-mix(in srgb, var(--md3-primary) 12%, var(--md3-surface-container-highest)) !important;
+        }
+        div[class*="st-key-community-tech-btn"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-primary) 8%, var(--md3-primary)) !important;
+        }
+        div[class*="st-key-community-tech-btn"] button:active {
+            background: color-mix(in srgb, var(--md3-on-primary) 12%, var(--md3-primary)) !important;
         }
 
         /* MD3 Top App Bar & Circular Return Button */
@@ -725,20 +909,26 @@ def _install_styles() -> None:
             min-width: 42px !important;
             min-height: 42px !important;
             padding: 0 !important;
-            background: #EADDFF !important;
-            color: #21005D !important;
+            background: var(--md3-primary-container) !important;
+            color: var(--md3-on-primary-container) !important;
             border: none !important;
-            box-shadow: var(--md3-shadow-1) !important;
+            box-shadow: none !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+            transition: background-color var(--md3-motion), color var(--md3-motion) !important;
         }
         div[class*="st-key-technical-back-btn"] button:hover {
-            background: #D0BCFF !important;
-            box-shadow: var(--md3-shadow-2) !important;
-            transform: scale(1.06) !important;
-            color: #21005D !important;
+            background: color-mix(in srgb, var(--md3-on-primary-container) 8%, var(--md3-primary-container)) !important;
+            box-shadow: none !important;
+            color: var(--md3-on-primary-container) !important;
+        }
+        div[class*="st-key-technical-back-btn"] button:active {
+            background: color-mix(in srgb, var(--md3-on-primary-container) 12%, var(--md3-primary-container)) !important;
+        }
+        div[class*="st-key-technical-back-btn"] button:focus-visible {
+            outline: 3px solid var(--md3-primary) !important;
+            outline-offset: 2px !important;
         }
         .technical-appbar-info {
             display: flex;
@@ -758,7 +948,7 @@ def _install_styles() -> None:
             font-weight: 800;
             margin: 0;
             line-height: 1.2;
-            color: #1A1C1E;
+            color: var(--md3-on-surface);
             display: flex;
             align-items: center;
             gap: 0.6rem;
@@ -766,10 +956,10 @@ def _install_styles() -> None:
         .technical-appbar-age {
             font-size: 0.76rem;
             font-weight: 600;
-            color: #44474E;
-            background: #E9EFF6;
+            color: var(--md3-on-surface-variant);
+            background: var(--md3-surface-container-high);
             padding: 0.15rem 0.6rem;
-            border-radius: 9999px;
+            border-radius: 12px;
         }
         .technical-appbar-chip-wrapper {
             display: flex;
@@ -779,14 +969,14 @@ def _install_styles() -> None:
             margin-right: 5rem;
         }
         .technical-appbar-chip {
-            background: #FFFFFF;
-            border: 1px solid #74777F;
-            border-radius: 9999px;
+            background: var(--md3-surface-container);
+            border: 1px solid var(--md3-outline);
+            border-radius: 16px;
             padding: 0.35rem 0.95rem;
             font-size: 0.76rem;
             font-weight: 600;
-            color: #44474E;
-            box-shadow: var(--md3-shadow-1);
+            color: var(--md3-on-surface-variant);
+            box-shadow: none;
             white-space: nowrap;
         }
 
@@ -794,9 +984,9 @@ def _install_styles() -> None:
             display: none !important;
         }
         .simulation-notice {
-            background: #FFF4E5;
-            border: 1px solid #FFE0B2;
-            border-left: 4px solid #F59E0B;
+            background: var(--md3-warning-container);
+            border: 0;
+            border-left: 4px solid var(--md3-warning);
             border-radius: 12px;
             display: flex;
             flex-direction: column;
@@ -804,7 +994,7 @@ def _install_styles() -> None:
             margin-bottom: 0.75rem;
             padding: 0.75rem;
         }
-        .simulation-notice span { color: #5D4037; font-size: 0.78rem; }
+        .simulation-notice span { color: var(--md3-on-warning-container); font-size: 0.78rem; }
         .monitor-status-grid {
             display: grid;
             gap: 0.65rem;
@@ -812,23 +1002,18 @@ def _install_styles() -> None:
             margin: 0.7rem 0;
         }
         .monitor-status-item {
-            background: #EBF1FA;
+            background: var(--md3-surface-container);
             border: none;
             border-radius: 18px;
             min-width: 0;
             padding: 0.75rem 0.95rem;
-            box-shadow: var(--md3-shadow-1);
-            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+            box-shadow: none;
         }
-        .monitor-status-item:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--md3-shadow-2);
-        }
-        .monitor-status-item.connected { background: #EBF1FA; }
-        .monitor-status-item.warning { background: #FFDCC2; }
+        .monitor-status-item.connected { background: var(--md3-surface-container); }
+        .monitor-status-item.warning { background: var(--md3-warning-container); }
         .monitor-status-item.danger { background: var(--md3-error-container); }
         .monitor-status-label {
-            color: #44474E;
+            color: var(--md3-on-surface-variant);
             display: block;
             font-size: 11px;
             font-weight: 600;
@@ -837,7 +1022,7 @@ def _install_styles() -> None:
             letter-spacing: 0.04em;
         }
         .monitor-status-value {
-            color: #1A1C1E;
+            color: var(--md3-on-surface);
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
@@ -847,35 +1032,34 @@ def _install_styles() -> None:
             overflow-wrap: anywhere;
         }
         .monitor-status-item.danger .monitor-status-value { color: var(--md3-on-error-container); }
-        .monitor-status-item.warning .monitor-status-value { color: #311100; }
+        .monitor-status-item.warning .monitor-status-value { color: var(--md3-on-warning-container); }
         .status-live-dot {
             width: 8px;
             height: 8px;
-            background-color: #008744;
+            background-color: var(--md3-success);
             border-radius: 50%;
             display: inline-block;
-            box-shadow: 0 0 0 0 rgba(0, 135, 68, 0.7);
             animation: pulse-live 1.8s infinite;
         }
         @keyframes pulse-live {
             0% {
                 transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(0, 135, 68, 0.7);
+                opacity: 0.75;
             }
             70% {
                 transform: scale(1);
-                box-shadow: 0 0 0 6px rgba(0, 135, 68, 0);
+                opacity: 1;
             }
             100% {
                 transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(0, 135, 68, 0);
+                opacity: 0.75;
             }
         }
         .current-alert {
             align-items: center;
-            background: #E8F8EE;
+            background: var(--md3-surface-container-low);
             border-radius: 16px;
-            box-shadow: var(--md3-shadow-1);
+            box-shadow: none;
             display: flex;
             font-size: 0.88rem;
             font-weight: 600;
@@ -883,32 +1067,32 @@ def _install_styles() -> None:
             padding: 0.65rem 1.1rem;
             margin-bottom: 0.85rem;
             border: none;
-            color: #00210E;
+            color: var(--md3-on-surface);
         }
-        .current-alert.safe { background: #E8F8EE; color: #00210E; }
-        .current-alert.warning { background: #FFF4E5; color: #663C00; }
+        .current-alert.safe { background: var(--md3-surface-container-low); color: var(--md3-on-surface); }
+        .current-alert.warning { background: var(--md3-warning-container); color: var(--md3-on-warning-container); }
         .current-alert.danger { background: var(--md3-error-container); color: var(--md3-on-error-container); }
         .st-key-overview-panel,
         .st-key-coordinate-panel,
         .st-key-ai-panel {
-            background: #FFFFFF;
-            border: 1px solid rgba(0, 0, 0, 0.05);
+            background: var(--md3-surface-container-low);
+            border: 0;
             border-radius: 24px;
             min-height: 550px;
             padding: 1.4rem;
-            box-shadow: var(--md3-shadow-1);
+            box-shadow: none;
         }
         .st-key-axis-trend-panel {
-            background: #FFFFFF;
-            border: 1px solid rgba(0, 0, 0, 0.05);
+            background: var(--md3-surface-container-low);
+            border: 0;
             border-radius: 24px;
             margin-top: 0.9rem;
             padding: 1.4rem;
-            box-shadow: var(--md3-shadow-1);
+            box-shadow: none;
         }
         .panel-heading {
             align-items: flex-start;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            border-bottom: 1px solid var(--md3-outline-variant);
             display: flex;
             justify-content: space-between;
             margin-bottom: 0.85rem;
@@ -919,46 +1103,46 @@ def _install_styles() -> None:
             font-weight: 700;
             line-height: 1.2;
             margin: 0.16rem 0 0;
-            color: #1A1C1E;
+            color: var(--md3-on-surface);
         }
-        .panel-note { color: #44474E; font-size: 0.72rem; text-align: right; }
+        .panel-note { color: var(--md3-on-surface-variant); font-size: 0.72rem; text-align: right; }
         .state-hero { padding: 0.6rem 0 0.9rem; }
-        .state-label { color: #44474E; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+        .state-label { color: var(--md3-on-surface-variant); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
         .state-hero-pill {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             width: 100%;
-            border-radius: 9999px;
+            border-radius: 18px;
             padding: 0.65rem 1.2rem;
             font-size: 1.3rem;
             font-weight: 750;
             margin-top: 0.35rem;
             letter-spacing: 0.02em;
-            box-shadow: var(--md3-shadow-1);
+            box-shadow: none;
         }
-        .state-hero-pill.safe, .state-hero-pill.connected { background: var(--md3-success-container); color: var(--md3-on-success-container); }
-        .state-hero-pill.warning { background: #FFDCC2; color: #311100; }
-        .state-hero-pill.danger { background: var(--md3-error); color: #FFFFFF; animation: clinical-pulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1); }
+        .state-hero-pill.safe, .state-hero-pill.connected { background: var(--md3-surface-container); color: var(--md3-on-surface); }
+        .state-hero-pill.warning { background: var(--md3-warning-container); color: var(--md3-on-warning-container); }
+        .state-hero-pill.danger { background: var(--md3-error-container); color: var(--md3-on-error-container); animation: clinical-pulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1); }
         .detail-list { display: flex; flex-direction: column; gap: 6px; }
         .detail-row {
             align-items: center;
-            background: #F1F4F9;
+            background: var(--md3-surface-container);
             border-radius: 12px;
             display: flex;
             justify-content: space-between;
             min-height: 42px;
             padding: 8px 14px;
             border: none;
-            transition: background 0.15s ease;
+            transition: background-color var(--md3-motion);
         }
         .detail-row:nth-child(even) {
-            background: #E9EFF6;
+            background: var(--md3-surface-container-high);
         }
-        .detail-row span { color: #44474E; font-size: 0.78rem; font-weight: 500; }
-        .detail-row strong { font-size: 0.88rem; color: #1A1C1E; font-weight: 700; overflow-wrap: anywhere; text-align: right; }
+        .detail-row span { color: var(--md3-on-surface-variant); font-size: 0.78rem; font-weight: 500; }
+        .detail-row strong { font-size: 0.88rem; color: var(--md3-on-surface); font-weight: 700; overflow-wrap: anywhere; text-align: right; }
         .coordinate-stats-wrapper {
-            background: #E9EFF6;
+            background: var(--md3-surface-container);
             border-radius: 16px;
             padding: 0.45rem 0.65rem;
             margin-bottom: 0.8rem;
@@ -971,18 +1155,18 @@ def _install_styles() -> None:
             margin-bottom: 0;
         }
         .coordinate-stat, .ai-meta-item {
-            background: #FFFFFF;
+            background: var(--md3-surface-container-high);
             border-radius: 12px;
             border: none;
             min-width: 0;
             padding: 0.45rem 0.65rem;
             text-align: center;
-            box-shadow: var(--md3-shadow-1);
+            box-shadow: none;
         }
         .coordinate-stat:first-child, .ai-meta-item:first-child { padding-left: 0.65rem; }
         .coordinate-stat:last-child, .ai-meta-item:last-child { border-right: none; }
         .coordinate-stat span, .ai-meta-item span {
-            color: #44474E;
+            color: var(--md3-on-surface-variant);
             display: block;
             font-size: 0.64rem;
             font-weight: 600;
@@ -993,11 +1177,11 @@ def _install_styles() -> None:
             display: block;
             font-size: 0.86rem;
             font-weight: 750;
-            color: #1A1C1E;
+            color: var(--md3-on-surface);
             overflow-wrap: anywhere;
         }
         .projection-label {
-            color: #44474E;
+            color: var(--md3-on-surface-variant);
             font-size: 0.68rem;
             font-weight: 700;
             margin: 0.2rem 0 0.1rem;
@@ -1005,7 +1189,7 @@ def _install_styles() -> None:
             letter-spacing: 0.04em;
         }
         .axis-trend-stats-wrapper {
-            background: #E9EFF6;
+            background: var(--md3-surface-container);
             border-radius: 16px;
             padding: 0.45rem 0.65rem;
             margin-bottom: 0.8rem;
@@ -1018,18 +1202,18 @@ def _install_styles() -> None:
             margin-bottom: 0;
         }
         .axis-trend-stat {
-            background: #FFFFFF;
+            background: var(--md3-surface-container-high);
             border-radius: 12px;
             border: none;
             min-width: 0;
             padding: 0.45rem 0.65rem;
             text-align: center;
-            box-shadow: var(--md3-shadow-1);
+            box-shadow: none;
         }
         .axis-trend-stat:first-child { padding-left: 0.65rem; }
         .axis-trend-stat:last-child { border-right: none; }
         .axis-trend-stat span {
-            color: #44474E;
+            color: var(--md3-on-surface-variant);
             display: block;
             font-size: 0.64rem;
             font-weight: 600;
@@ -1038,14 +1222,14 @@ def _install_styles() -> None:
         }
         .axis-trend-stat strong { display: block; font-size: 0.88rem; font-weight: 750; }
         .axis-trend-stat.x strong { color: var(--md3-primary); }
-        .axis-trend-stat.y strong { color: #008744; }
-        .axis-trend-stat.z strong { color: #0284C7; }
+        .axis-trend-stat.y strong { color: var(--md3-secondary); }
+        .axis-trend-stat.z strong { color: var(--md3-tertiary); }
         .axis-trend-empty {
             align-items: center;
-            background: #F8F9FE;
-            border: 1px dashed rgba(0, 0, 0, 0.12);
+            background: var(--md3-surface-container);
+            border: 1px dashed var(--md3-outline-variant);
             border-radius: 16px;
-            color: #44474E;
+            color: var(--md3-on-surface-variant);
             display: flex;
             justify-content: center;
             min-height: 220px;
@@ -1058,8 +1242,8 @@ def _install_styles() -> None:
         details[title="Click to view actions"] { display: none; }
         .coordinate-empty {
             align-items: center;
-            background: #F8F9FE;
-            border: 1px dashed rgba(0, 0, 0, 0.12);
+            background: var(--md3-surface-container);
+            border: 1px dashed var(--md3-outline-variant);
             border-radius: 16px;
             display: flex;
             flex-direction: column;
@@ -1067,36 +1251,44 @@ def _install_styles() -> None:
             min-height: 410px;
             text-align: center;
         }
-        .coordinate-empty strong { font-size: 1rem; color: #1A1C1E; }
-        .coordinate-empty span { color: #44474E; font-size: 0.76rem; margin-top: 0.35rem; }
+        .coordinate-empty strong { font-size: 1rem; color: var(--md3-on-surface); }
+        .coordinate-empty span { color: var(--md3-on-surface-variant); font-size: 0.76rem; margin-top: 0.35rem; }
         .ai-entry {
-            background: #F3EDF7;
+            background: var(--md3-surface-container);
             border-radius: 16px;
             margin: 8px 0;
             padding: 10px 14px;
             border: none;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .ai-entry:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            box-shadow: none;
         }
         .ai-entry-head { align-items: center; display: flex; justify-content: space-between; gap: 0.5rem; }
         .ai-entry-status {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
-            color: #008744;
+            color: var(--md3-success);
             font-size: 0.74rem;
             font-weight: 750;
         }
         .ai-entry-status.danger { color: var(--md3-error); }
-        .ai-entry-status.warning { color: #D97706; }
-        .ai-entry-time { color: #74777F; font-size: 0.68rem; font-weight: 500; }
-        .ai-entry p { font-size: 0.82rem; line-height: 1.45; margin: 0.35rem 0; color: #1A1C1E; }
+        .ai-entry-status.warning { color: var(--md3-warning); }
+        .ai-entry-status.simulated { color: var(--md3-tertiary); }
+        .ai-entry-dot {
+            background: var(--md3-success);
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+            height: 8px;
+            margin-right: 6px;
+            width: 8px;
+        }
+        .ai-entry-status.danger .ai-entry-dot { background: var(--md3-error); }
+        .ai-entry-status.warning .ai-entry-dot { background: var(--md3-warning); }
+        .ai-entry-status.simulated .ai-entry-dot { background: var(--md3-tertiary); }
+        .ai-entry-time { color: var(--md3-on-surface-variant); font-size: 0.68rem; font-weight: 500; }
+        .ai-entry p { font-size: 0.82rem; line-height: 1.45; margin: 0.35rem 0; color: var(--md3-on-surface); }
         .ai-entry-meta {
-            color: #74777F;
+            color: var(--md3-on-surface-variant);
             font-size: 0.68rem;
             overflow-wrap: anywhere;
             display: flex;
@@ -1106,8 +1298,8 @@ def _install_styles() -> None:
             margin-top: 0.25rem;
         }
         .ai-entry-code {
-            background: #E6E0E9;
-            color: #1D1B20;
+            background: var(--md3-surface-container-highest);
+            color: var(--md3-on-surface);
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             font-size: 0.66rem;
             font-weight: 600;
@@ -1140,22 +1332,17 @@ def _install_styles() -> None:
             border: none !important;
             border-radius: 18px !important;
             padding: 0.85rem 1.1rem !important;
-            box-shadow: var(--md3-shadow-1) !important;
-            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
-        }
-        div[data-testid="stMetric"]:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--md3-shadow-2) !important;
+            box-shadow: none !important;
         }
         div[data-testid="stMetric"] label[data-testid="stMetricLabel"] {
-            color: #44474E;
+            color: var(--md3-on-surface-variant);
             font-size: 0.72rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.04em;
         }
         div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-            color: #1A1C1E;
+            color: var(--md3-on-surface);
             font-size: 1.5rem;
             font-weight: 800;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -1164,37 +1351,49 @@ def _install_styles() -> None:
         .sensor-line:last-child { border-bottom: 0; }
         .sensor-line b { color: var(--terminal-accent); font-weight: 600; }
         [data-testid="stDataFrame"] {
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: 6px;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+            background: var(--md3-surface-container-low);
+            border: 1px solid var(--md3-outline-variant);
+            border-radius: 16px;
+            box-shadow: none;
         }
         [data-baseweb="tab-list"] { gap: 0.2rem; }
         [data-baseweb="tab"] { letter-spacing: 0; font-weight: 600; }
+        [data-testid="stAlertContainer"] {
+            background: var(--md3-surface-container-high) !important;
+            border: 0 !important;
+            border-radius: 16px !important;
+            color: var(--md3-on-surface) !important;
+        }
+        [data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {
+            background: var(--md3-warning-container) !important;
+            color: var(--md3-on-warning-container) !important;
+        }
+        [data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {
+            background: var(--md3-error-container) !important;
+            color: var(--md3-on-error-container) !important;
+        }
+        [data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) {
+            background: var(--md3-surface-container-high) !important;
+            color: var(--md3-success) !important;
+        }
+        [data-testid^="stAlertContent"] {
+            background: transparent !important;
+            color: inherit !important;
+        }
         #vg-tooltip-element.vg-tooltip {
-            background: var(--surface) !important;
-            border-color: var(--line) !important;
-            color: var(--ink) !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background: var(--md3-surface-container-high) !important;
+            border-color: var(--md3-outline-variant) !important;
+            color: var(--md3-on-surface) !important;
+            box-shadow: var(--md3-shadow-2);
         }
         @keyframes clinical-pulse {
-            0% {
-                background-color: #DC2626;
-                box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7);
-            }
-            50% {
-                background-color: #EF4444;
-                box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
-            }
-            100% {
-                background-color: #DC2626;
-                box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
-            }
+            0%, 100% { opacity: 0.9; }
+            50% { opacity: 1; }
         }
         .current-alert.danger {
             background: var(--md3-error-container) !important;
             color: var(--md3-on-error-container) !important;
-            border: 1.5px solid var(--md3-error) !important;
+            border: 1px solid var(--md3-error) !important;
             border-radius: 16px !important;
             font-weight: 700 !important;
             animation: clinical-pulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1);
@@ -1206,16 +1405,16 @@ def _install_styles() -> None:
         }
         .current-alert.safe,
         .current-alert:not(.warning):not(.danger) {
-            background: #E8F8EE !important;
-            color: #00210E !important;
-            border: 1px solid #C4EED0 !important;
+            background: var(--md3-surface-container-low) !important;
+            color: var(--md3-on-surface) !important;
+            border: 0 !important;
             border-radius: 16px !important;
             font-weight: 600 !important;
         }
         .current-alert.warning {
-            background: #FFF4E5 !important;
-            color: #663C00 !important;
-            border: 1px solid #FFE0B2 !important;
+            background: var(--md3-warning-container) !important;
+            color: var(--md3-on-warning-container) !important;
+            border: 0 !important;
             border-radius: 16px !important;
             font-weight: 600 !important;
         }
@@ -1224,21 +1423,116 @@ def _install_styles() -> None:
             align-items: center;
             gap: 0.35rem;
             padding: 0.3rem 0.85rem;
-            border-radius: 9999px;
+            border-radius: 14px;
             font-size: 0.74rem;
             font-weight: 700;
             letter-spacing: 0.02em;
         }
         .status-badge.safe {
-            background: #C4EED0 !important;
-            color: #00210E !important;
+            background: var(--md3-surface-container-high) !important;
+            color: var(--md3-success) !important;
             border: none !important;
         }
         .status-badge.alarm {
             background: var(--md3-error) !important;
-            color: #FFFFFF !important;
+            color: var(--md3-on-error) !important;
             border: none !important;
             animation: clinical-pulse 2s infinite;
+        }
+        .status-badge.warning {
+            background: var(--md3-warning-container) !important;
+            color: var(--md3-on-warning-container) !important;
+        }
+        .status-badge.info {
+            background: var(--md3-primary-container) !important;
+            color: var(--md3-on-primary-container) !important;
+        }
+        .status-badge.offline {
+            background: var(--md3-surface-container-high) !important;
+            color: var(--md3-on-surface-variant) !important;
+        }
+        .resident-detail-title {
+            color: var(--md3-on-surface);
+            font-size: 1.35rem;
+            font-weight: 700;
+            margin: 0.2rem 0 0;
+        }
+        .resident-detail-note { font-weight: 600; }
+        .resident-status-wrap { margin: 0.2rem 0 0.85rem; text-align: center; }
+        .resident-status-capsule {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 16px;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+        .resident-status-capsule.safe {
+            background: var(--md3-surface-container-highest);
+            color: var(--md3-success);
+        }
+        .resident-status-capsule.warning {
+            background: var(--md3-warning-container);
+            color: var(--md3-on-warning-container);
+        }
+        .resident-status-capsule.danger {
+            background: var(--md3-error-container);
+            color: var(--md3-on-error-container);
+            animation: clinical-pulse 1.8s infinite cubic-bezier(0.2, 0, 0, 1);
+        }
+        .resident-status-capsule.offline {
+            background: var(--md3-surface-container-highest);
+            color: var(--md3-on-surface-variant);
+        }
+        .resident-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.45rem;
+            margin-bottom: 0.75rem;
+        }
+        .resident-summary-item {
+            background: var(--md3-surface-container-highest);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            padding: 0.5rem 0.65rem;
+        }
+        .resident-summary-item span {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .resident-summary-item strong {
+            color: var(--md3-on-surface);
+            font-size: 0.84rem;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+        .resident-chart-heading {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            margin: 0.5rem 0 0.25rem;
+        }
+        .resident-chart-heading span {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .resident-chart-heading strong {
+            color: var(--md3-primary);
+            font-size: 0.68rem;
+            font-weight: 700;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                scroll-behavior: auto !important;
+                transition-duration: 0.001ms !important;
+            }
         }
         @media (max-width: 1100px) {
             [data-testid="stMainBlockContainer"] { padding-left: 1rem; padding-right: 1rem; }
@@ -1365,15 +1659,15 @@ def _show_current_alert(status: str) -> None:
         message = "【紧急跌倒报警】毫米波雷达与智能分析已确认跌倒事件，现场声光报警已触发！"
     elif status == "SUSPECTED_FALL":
         css_class = "warning"
-        badge_html = '<span class="status-badge" style="background:#FEF3C7;color:#D97706;border:1px solid #FCD34D;">▲ 疑似跌倒</span>'
+        badge_html = '<span class="status-badge warning">▲ 疑似跌倒</span>'
         message = "持续检测到人体异常姿态信号，系统进入防误报延时二次判定中..."
     elif status == "OBSERVING":
         css_class = "warning"
-        badge_html = '<span class="status-badge" style="background:#EFF6FF;color:#0284C7;border:1px solid #BAE6FD;">ℹ 分析中</span>'
+        badge_html = '<span class="status-badge info">ℹ 分析中</span>'
         message = "雷达检测到空间微动信号，系统正在持续观察并更新最新点云。"
     elif status == "DISCONNECTED":
         css_class = "warning"
-        badge_html = '<span class="status-badge" style="background:#F1F5F9;color:#64748B;border:1px solid #CBD5E1;">✕ 链路断开</span>'
+        badge_html = '<span class="status-badge offline">✕ 链路断开</span>'
         message = "传感器串口或数据总线链路中断，正在等待主程序重连..."
     elif status == "NO_PERSON":
         css_class = "safe"
@@ -1651,14 +1945,20 @@ def _show_ai_panel(
         (
             row
             for row in reversed(events)
-            if _text(row.get("event")) in {"AI_RESPONSE", "AI_ERROR", "AI_FALLBACK"}
+            if _text(row.get("event"))
+            in {"AI_RESPONSE", "AI_ERROR", "AI_FALLBACK"}
+            | SIMULATED_AI_TRACE_EVENTS
         ),
         {},
     )
+    simulated = _text(latest.get("ai_status")) == "AI_SIMULATED"
     meta = [
         ("RADAR", _result(latest.get("radar_is_fall"))),
         ("AI", _result(latest.get("ai_result"))),
-        ("LATENCY", _inference(latest)),
+        (
+            "TRACE" if simulated else "LATENCY",
+            "SIMULATED" if simulated else _inference(latest),
+        ),
         ("LAST", _short_time(_text(latest_ai_event.get("timestamp")))),
     ]
     meta_html = "".join(
@@ -1681,16 +1981,29 @@ def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
         return
 
     blocks = []
+    simulated_labels = {
+        "RADAR_INPUT": "毫米波数据接收",
+        "FEATURE_EXTRACTED": "特征提取",
+        "AI_REQUEST_SIMULATED": "本地智能分析",
+        "AI_RESULT_SIMULATED": "模型结果（演示）",
+        "FUSION_RESULT": "多源结果融合",
+        "FALL_CONFIRMED": "跌倒报警",
+        "WARNING_CONFIRMED": "疑似异常",
+        "NORMAL_CONFIRMED": "正常确认",
+    }
     for entry in reversed(entries[-7:]):
         css_class = ""
-        dot_color = "#008744"
         if entry.status in {"FALL_DETECTED", "ALARM_TRIGGERED"}:
             css_class = "danger"
-            dot_color = "#BA1A1A"
         elif entry.status == "ANALYZING":
             css_class = "warning"
-            dot_color = "#D97706"
-        status = "规则判定完成" if entry.status == "FALLBACK" else entry.status
+        elif entry.simulated:
+            css_class = "danger" if entry.status == "FALL_CONFIRMED" else "simulated"
+        status = (
+            simulated_labels.get(entry.status, entry.status)
+            if entry.simulated
+            else ("规则判定完成" if entry.status == "FALLBACK" else entry.status)
+        )
         message = (
             "本地安全规则已完成判定。"
             if entry.status == "FALLBACK"
@@ -1698,16 +2011,29 @@ def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
         )
         model = "本地安全规则" if entry.status == "FALLBACK" else entry.model
         result = "--" if entry.result is None else str(entry.result)
-        latency = (
-            f"{entry.inference_ms:.1f} ms" if entry.inference_ms is not None else "waiting"
-        )
+        if entry.simulated_elapsed_ms is not None:
+            latency = f"分析耗时（演示） {entry.simulated_elapsed_ms:.0f} ms"
+        elif entry.simulated:
+            latency = "SIMULATED AI TRACE"
+        else:
+            latency = (
+                f"{entry.inference_ms:.1f} ms"
+                if entry.inference_ms is not None
+                else "waiting"
+            )
         repeat = f" · merged {entry.occurrences}" if entry.occurrences > 1 else ""
-        dot_html = f'<span style="width:8px;height:8px;border-radius:50%;background:{dot_color};display:inline-block;margin-right:6px;flex-shrink:0;"></span>'
-        code_tag = f'<span class="ai-entry-code">input {entry.is_fall} → {result}</span>'
+        dot_html = '<span class="ai-entry-dot"></span>'
+        prefix = "DEMO" if entry.simulated else "input"
+        code_tag = f'<span class="ai-entry-code">{prefix} {entry.is_fall} → {result}</span>'
+        timestamp = (
+            _short_time_millis(entry.timestamp)
+            if entry.simulated
+            else _short_time(entry.timestamp)
+        )
         blocks.append(
             '<div class="ai-entry"><div class="ai-entry-head">'
             f'<span class="ai-entry-status {css_class}">{dot_html}{escape(status)}</span>'
-            f'<span class="ai-entry-time">{escape(_short_time(entry.timestamp))}</span></div>'
+            f'<span class="ai-entry-time">{escape(timestamp)}</span></div>'
             f'<p>{escape(message)}</p>'
             f'<div class="ai-entry-meta">{code_tag} · '
             f'{escape(model)} · {escape(latency)}{escape(repeat)}</div></div>'
@@ -1915,7 +2241,15 @@ def _install_scroll_policy() -> None:
 def _status_class(value: str) -> str:
     if value in {"CONNECTED", "NORMAL", "TRACKING", "PRESENT"}:
         return "connected"
-    if value in {"ANALYZING", "OBSERVING", "SUSPECTED_FALL", "FALLBACK", "STALE", "WAITING"}:
+    if value in {
+        "ANALYZING",
+        "OBSERVING",
+        "SUSPECTED_FALL",
+        "FALLBACK",
+        "SIMULATED",
+        "STALE",
+        "WAITING",
+    }:
         return "warning"
     if value in {"CONFIRMED_FALL", "FALL_DETECTED", "ERROR"}:
         return "danger"
@@ -1936,6 +2270,8 @@ def _inference(latest: pd.Series) -> str:
 
 
 def _business_ai_source(model: str) -> str:
+    if model == "demo-direct":
+        return "AI 分析演示"
     return "本地安全规则" if model in {"fallback", "disabled", "not-requested"} else model
 
 
@@ -1954,6 +2290,13 @@ def _short_time(value: str) -> str:
         return datetime.fromisoformat(value).strftime("%H:%M:%S")
     except ValueError:
         return value or "--:--:--"
+
+
+def _short_time_millis(value: str) -> str:
+    try:
+        return datetime.fromisoformat(value).strftime("%H:%M:%S.%f")[:-3]
+    except ValueError:
+        return value or "--:--:--.---"
 
 
 def _as_bool(value: object) -> bool:

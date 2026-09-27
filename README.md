@@ -190,7 +190,7 @@ STOP_WINDOWS.bat              只停止本项目启动的进程
 ld6002c-community-demo
 ```
 
-该命令默认启用 `http://127.0.0.1:11434` 的 `qwen3:0.6b`，在 `0.0.0.0:8501` 启动 Streamlit，打开社区大屏，并在终端打印三个地址：
+该命令默认在 `DIRECT` 即时演示模式下运行，在 `0.0.0.0:8501` 启动 Streamlit，打开社区大屏，并在终端打印三个地址：
 
 ```text
 http://127.0.0.1:8501/
@@ -198,7 +198,13 @@ http://127.0.0.1:8501/?view=control
 http://127.0.0.1:8501/?view=technical&resident=B2-302
 ```
 
-第二个地址是演示控制台；同一局域网的手机可使用终端打印的 `http://<电脑局域网 IP>:8501/?view=control`。启动器会同时运行社区后台 runtime，默认以 2 Hz 为全部住户持续生成有界滚动遥测，因此无需先打开控制台或手工发送正常数据。如 Ollama 不可用，业务页面继续使用安全规则给出结果，控制台 health 区域和技术事件会记录 `AI_FALLBACK`。可用 `--no-enable-ai`、`--no-audio-alarm`、`--port 8502` 覆盖默认值。重置所有社区演示状态、演示事件、runtime health 和分住户遥测后退出：
+第二个地址是演示控制台；同一局域网的手机可使用终端打印的 `http://<电脑局域网 IP>:8501/?view=control`。启动器会同时运行社区后台 runtime，默认以 2 Hz 为全部住户持续生成有界滚动遥测，因此无需先打开控制台或手工发送正常数据。`DIRECT` 模式立即应用管理员指定状态，不等待 Ollama，并以明确标记的 `SIMULATED AI TRACE` 展示课程分析过程；需要展示真实 Qwen 调用时，使用控制台中的“AI完整链路”或启动参数：
+
+```bash
+ld6002c-community-demo --demo-response-mode ai
+```
+
+AI 模式使用 `http://127.0.0.1:11434` 的 `qwen3:0.6b`；如 Ollama 不可用，业务页面继续使用安全规则给出结果，控制台 health 区域和技术事件会记录 `AI_FALLBACK`。还可用 `--no-enable-ai`、`--no-audio-alarm`、`--port 8502` 覆盖默认值。重置所有社区演示状态、演示事件、runtime health 和分住户遥测后退出：
 
 ```bash
 ld6002c-community-demo --reset

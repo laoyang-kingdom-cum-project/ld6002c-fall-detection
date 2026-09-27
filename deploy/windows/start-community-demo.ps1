@@ -77,6 +77,7 @@ try {
         "--host", "0.0.0.0",
         "--port", $dashboardPort.ToString(),
         "--enable-ai",
+        "--demo-response-mode", "direct",
         "--ollama-base-url", $ollamaBaseUrl,
         "--ollama-model", $ollamaModel,
         "--alarm-volume", $alarmVolume.ToString(),

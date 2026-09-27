@@ -30,6 +30,7 @@ def test_community_demo_defaults_to_ai_host_all_interfaces_and_port_8501() -> No
     assert args.port == 8501
     assert args.ollama_base_url == "http://127.0.0.1:11434"
     assert args.ollama_model == "qwen3:0.6b"
+    assert args.demo_response_mode == "direct"
 
 
 def test_community_demo_exports_dashboard_process_configuration(tmp_path) -> None:
@@ -47,6 +48,7 @@ def test_community_demo_exports_dashboard_process_configuration(tmp_path) -> Non
 
     assert env["AI_ENABLED"] == "false"
     assert env["AUDIO_ALARM_ENABLED"] == "false"
+    assert env["LD6002C_DEMO_RESPONSE_MODE"] == "DIRECT"
     assert env["LD6002C_COMMUNITY_STATE_PATH"] == str(
         (tmp_path / "state.json").resolve()
     )

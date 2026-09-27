@@ -27,7 +27,7 @@
 
 BAT 仅对当前 PowerShell 进程使用 `-ExecutionPolicy Bypass`，不会更改系统永久策略。所有子进程的工作目录都是仓库根目录，支持包含空格和中文的路径。
 
-`START_COMMUNITY_DEMO.bat` 打开 `http://127.0.0.1:8501/`。演示控制台为 `http://127.0.0.1:8501/?view=control`；技术页示例为 `http://127.0.0.1:8501/?view=technical&resident=B2-302`。手机与电脑同网时，把 `127.0.0.1` 替换为电脑局域网 IP。关闭该 BAT 窗口或按 `Ctrl+C` 即停止社区演示。
+`START_COMMUNITY_DEMO.bat` 默认使用 `DIRECT` 即时演示模式并打开 `http://127.0.0.1:8501/`，点击场景后不等待 Ollama。演示控制台为 `http://127.0.0.1:8501/?view=control`，可临时切换到“AI完整链路”；技术页示例为 `http://127.0.0.1:8501/?view=technical&resident=B2-302`。手机与电脑同网时，把 `127.0.0.1` 替换为电脑局域网 IP。关闭该 BAT 窗口或按 `Ctrl+C` 即停止社区演示。
 
 ## 离线安装内容
 

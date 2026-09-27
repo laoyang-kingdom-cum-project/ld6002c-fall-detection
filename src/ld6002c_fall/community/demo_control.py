@@ -9,7 +9,7 @@ from typing import Literal
 from ..ai import FallAIResult, OllamaFallAI
 from ..alarm import AlarmOutput
 from .controller import CommunityController
-from .models import DemoScenario, ResidentState, local_now
+from .models import DemoResponseMode, DemoScenario, ResidentState, local_now
 from .telemetry import CommunityTelemetryStore
 
 
@@ -49,6 +49,7 @@ class DemoControlService:
         action: DemoAction,
         *,
         timestamp: datetime | None = None,
+        response_mode: DemoResponseMode | None = None,
     ) -> DemoControlResult:
         now = timestamp or local_now()
         if action == "ACKNOWLEDGE":
@@ -65,5 +66,6 @@ class DemoControlService:
             scenario,
             timestamp=now,
             demo_override=action != "RECOVER",
+            response_mode=response_mode,
         )
         return DemoControlResult(action, state, None, "DEMO_REQUEST")

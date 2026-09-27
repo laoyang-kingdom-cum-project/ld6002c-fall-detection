@@ -57,6 +57,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ollama-model", default=DEFAULT_OLLAMA_MODEL)
     parser.add_argument("--ollama-timeout", type=float, default=DEFAULT_OLLAMA_TIMEOUT)
     parser.add_argument(
+        "--demo-response-mode",
+        choices=("direct", "ai"),
+        default="direct",
+        help=(
+            "Apply operator-selected states immediately (direct) or wait for the "
+            "complete Ollama path (ai). Default: direct."
+        ),
+    )
+    parser.add_argument(
         "--audio-alarm",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -154,6 +163,8 @@ def main() -> None:
             interval_seconds=args.telemetry_interval,
             real_log_path=args.real_log_path,
             real_stale_seconds=args.real_stale_seconds,
+            demo_response_mode=args.demo_response_mode.upper(),
+            simulated_model=args.ollama_model,
         )
         process: subprocess.Popen[bytes] | None = None
         try:
@@ -189,6 +200,7 @@ def main() -> None:
                 telemetry_status=runtime_health.telemetry,
                 ollama_status=_ready_ollama_status(runtime_health.ollama),
                 model=args.ollama_model,
+                demo_response_mode=args.demo_response_mode.upper(),
                 community_name=controller.registry.community_name,
                 resident_count=len(controller.registry.residents),
             )
@@ -251,6 +263,7 @@ def _build_environment(args: argparse.Namespace) -> dict[str, str]:
             "OLLAMA_BASE_URL": args.ollama_base_url,
             "OLLAMA_MODEL": args.ollama_model,
             "OLLAMA_TIMEOUT": str(args.ollama_timeout),
+            "LD6002C_DEMO_RESPONSE_MODE": args.demo_response_mode.upper(),
             "AUDIO_ALARM_ENABLED": str(args.audio_alarm).lower(),
             "ALARM_SOUND_PATH": str(args.alarm_sound.resolve()),
             "ALARM_VOLUME": str(args.alarm_volume),
@@ -336,6 +349,7 @@ def _print_ready_urls(
     telemetry_status: str,
     ollama_status: str,
     model: str,
+    demo_response_mode: str,
     community_name: str,
     resident_count: int,
 ) -> None:
@@ -346,6 +360,7 @@ def _print_ready_urls(
     print(f"Telemetry         : {telemetry_status}")
     print(f"Ollama            : {ollama_status}")
     print(f"Model             : {model}")
+    print(f"Demo Response     : {demo_response_mode}")
     print(f"Community         : {community_name}")
     print(f"Residents         : {resident_count}")
     print(f"Dashboard         : {local_url}/")

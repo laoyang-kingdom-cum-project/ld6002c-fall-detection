@@ -2,7 +2,14 @@
 
 from .controller import CommunityController, latest_alarm_resident_id
 from .demo_control import DemoAction, DemoControlResult, DemoControlService
-from .models import CommunityEvent, CommunityStatus, DemoScenario, Resident, ResidentState
+from .models import (
+    CommunityEvent,
+    CommunityStatus,
+    DemoResponseMode,
+    DemoScenario,
+    Resident,
+    ResidentState,
+)
 from .runtime import (
     CommunityDemoRuntime,
     CommunityRuntimeHealth,
@@ -30,6 +37,7 @@ __all__ = [
     "DemoAction",
     "DemoControlResult",
     "DemoControlService",
+    "DemoResponseMode",
     "DemoScenario",
     "Resident",
     "ResidentState",
