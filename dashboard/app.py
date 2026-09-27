@@ -87,22 +87,22 @@ class ThemePalette:
 
 LIGHT_PALETTE = ThemePalette(
     mode="light",
-    canvas="#F0F2F5",
+    canvas="#F8F9FE",
     surface="#FFFFFF",
-    surface_soft="#FAFAFA",
-    ink="#1F2937",
-    muted="#4B5563",
-    line="#E5E7EB",
-    header_background="rgba(255, 255, 255, 0.98)",
-    terra="#1677FF",
-    sage="#10B981",
+    surface_soft="#F3F3FA",
+    ink="#1A1C1E",
+    muted="#44474E",
+    line="#E2E8F0",
+    header_background="rgba(248, 249, 254, 0.98)",
+    terra="#005FB0",
+    sage="#008744",
     amber="#F59E0B",
-    danger="#EF4444",
+    danger="#BA1A1A",
     axis_blue="#0284C7",
-    chart_background="#FFFFFF",
-    chart_line="#E5E7EB",
-    chart_axis="#6B7280",
-    chart_grid="#F3F4F6",
+    chart_background="transparent",
+    chart_line="#E7E0EC",
+    chart_axis="#74777F",
+    chart_grid="#E7E0EC",
     terminal_background="#0B132B",
     terminal_text="#E2E8F0",
     terminal_line="#1E293B",
@@ -262,10 +262,6 @@ def _show_technical_detail(
     controller: CommunityController,
     requested_resident_id: str | None,
 ) -> None:
-    with st.container(key="technical-back-btn"):
-        if st.button("返回社区大屏", icon=":material/arrow_back:", type="primary"):
-            st.query_params.clear()
-            st.rerun()
     selected_id = requested_resident_id or st.session_state.get("selected_resident_id")
     try:
         resident = controller.registry.get(str(selected_id))
@@ -285,12 +281,31 @@ def _show_technical_detail(
         resident.id,
         telemetry,
     )
-    st.markdown(
-        '<div class="technical-resident-context"><strong>'
-        f'{escape(resident.address)} · {escape(resident.name)} · {resident.age}岁</strong>'
-        f'<span>{escape(data_source)}</span></div>',
-        unsafe_allow_html=True,
-    )
+
+    # MD3 Top App Bar
+    top_bar_col1, top_bar_col2, top_bar_col3 = st.columns([0.08, 0.62, 0.30], vertical_alignment="center")
+    with top_bar_col1:
+        with st.container(key="technical-back-btn"):
+            if st.button("", icon=":material/arrow_back:", type="secondary", help="返回社区大屏"):
+                st.query_params.clear()
+                st.rerun()
+    with top_bar_col2:
+        st.markdown(
+            f'<div class="technical-appbar-info">'
+            f'<span class="technical-appbar-sub">{escape(controller.registry.community_name)} · 毫米波生命体征监护</span>'
+            f'<h2 class="technical-appbar-title">{escape(resident.address)} · {escape(resident.name)} '
+            f'<span class="technical-appbar-age">{resident.age}岁</span></h2>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    with top_bar_col3:
+        st.markdown(
+            f'<div class="technical-appbar-chip-wrapper">'
+            f'<span class="technical-appbar-chip">⚡ {escape(data_source)}</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
     _show_live_dashboard(frame_path, event_path)
     _show_logs(frame_path, event_path)
 
@@ -368,16 +383,32 @@ def _install_styles() -> None:
             --md3-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
             --md3-shadow-glow: 0 8px 24px rgba(0, 95, 176, 0.3);
         }
-        header[data-testid="stHeader"], [data-testid="stToolbar"] {
+        /* 让原生顶栏背景透明，点击穿透，但保留右上角菜单可交互 */
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
+            height: 3rem !important;
+            z-index: 999990 !important;
+            pointer-events: none !important;
+        }
+        [data-testid="stToolbar"] {
+            visibility: visible !important;
+            display: flex !important;
+            pointer-events: auto !important;
+            z-index: 999999 !important;
+            right: 1.2rem !important;
+            top: 0.5rem !important;
+        }
+        /* 隐藏 Deploy 部署按钮，保留三点菜单与状态 */
+        .stDeployButton {
             display: none !important;
-            height: 0 !important;
         }
         #MainMenu, footer {
-            visibility: hidden !important;
+            visibility: visible !important;
         }
+        /* 页面顶部安全距离：避开原生顶栏高度 */
         .main .block-container,
         [data-testid="stMainBlockContainer"] {
-            padding-top: 2.2rem !important;
+            padding-top: 3.2rem !important;
             padding-bottom: 2rem !important;
             padding-left: 2.5rem !important;
             padding-right: 2.5rem !important;
@@ -403,6 +434,7 @@ def _install_styles() -> None:
             justify-content: space-between;
             margin-bottom: 0.8rem;
             padding: 0.2rem 0 0.8rem;
+            position: relative;
         }
         .wall-header h1 {
             font-size: 1.85rem;
@@ -429,6 +461,7 @@ def _install_styles() -> None:
             background: var(--md3-surface-container);
             padding: 0.35rem 0.85rem;
             border-radius: 9999px;
+            margin-right: 5rem;
         }
         .wall-live span {
             background: #008744;
@@ -512,30 +545,30 @@ def _install_styles() -> None:
         .section-heading span { color: #44474E; font-size: 0.72rem; font-weight: 500; }
 
         /* MD3 Resident Matrix Cards */
-        div[class*="st-key-resident-card-"] { margin-bottom: 0.35rem; }
+        div[class*="st-key-resident-card-"] { margin-bottom: 0.4rem; }
         div[class*="st-key-resident-card-"] button {
-            background: var(--md3-surface-container) !important;
+            background: #F3F3FA !important;
             border: 1.5px solid transparent !important;
             border-radius: 20px !important;
             color: #1A1C1E !important;
-            min-height: 64px !important;
-            padding: 0.55rem 0.75rem !important;
+            min-height: 68px !important;
+            padding: 0.65rem 0.85rem !important;
             text-align: left !important;
-            box-shadow: var(--md3-shadow-1) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
             transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
         }
         div[class*="st-key-resident-card-"] button:hover {
-            background: var(--md3-surface-container-high) !important;
+            background: #E9EFF6 !important;
             box-shadow: var(--md3-shadow-2) !important;
-            transform: translateY(-1.5px) !important;
+            transform: translateY(-2px) !important;
         }
         div[class*="st-key-resident-card-"] button p {
-            font-size: 0.73rem !important;
-            line-height: 1.4 !important;
+            font-size: 0.76rem !important;
+            line-height: 1.45 !important;
             white-space: pre-line !important;
             margin: 0 !important;
             color: inherit !important;
-            font-weight: 600 !important;
+            font-weight: 500 !important;
         }
         div[class*="st-key-resident-card-warning"] button {
             background: #FFF4E5 !important;
@@ -553,38 +586,65 @@ def _install_styles() -> None:
             color: #78909C !important;
             opacity: 0.85 !important;
         }
-        /* Active Selected Card: MD3 High Saturation Royal Cobalt Blue */
+        /* Active Selected Card: MD3 High Saturation Royal Cobalt Blue with Level 2 Shadow */
         div[class*="-selected-"] button {
             background: var(--md3-primary) !important;
             border: 2px solid #004785 !important;
             color: #FFFFFF !important;
-            box-shadow: var(--md3-shadow-glow) !important;
+            box-shadow: 0 4px 16px rgba(0, 95, 176, 0.25), var(--md3-shadow-glow) !important;
             transform: scale(1.02) !important;
         }
         div[class*="-selected-"] button:hover {
             background: #005096 !important;
-            box-shadow: 0 10px 28px rgba(0, 95, 176, 0.4) !important;
+            box-shadow: 0 6px 20px rgba(0, 95, 176, 0.35) !important;
             color: #FFFFFF !important;
         }
         div[class*="-selected-"] button p {
             color: #FFFFFF !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
         }
 
-        /* Filter Segmented Control Pills */
+        /* MD3 Filter Chips */
         div[data-testid="stSegmentedControl"] {
-            background: var(--md3-surface-container) !important;
+            background: transparent !important;
             border-radius: 9999px !important;
-            padding: 3px !important;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.06) !important;
+            padding: 0 !important;
+            gap: 0.5rem !important;
+            box-shadow: none !important;
         }
         div[data-testid="stSegmentedControl"] button {
             border-radius: 9999px !important;
-            border: none !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 16px !important;
+            font-size: 0.8rem !important;
             font-weight: 600 !important;
-            font-size: 0.76rem !important;
-            padding: 0.3rem 0.9rem !important;
+            letter-spacing: 0.01em !important;
+            border: 1px solid #74777F !important;
+            background: transparent !important;
+            color: #44474E !important;
             transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+            box-shadow: none !important;
+        }
+        div[data-testid="stSegmentedControl"] button:hover {
+            background: rgba(68, 71, 78, 0.08) !important;
+            border-color: #44474E !important;
+            color: #1A1C1E !important;
+        }
+        div[data-testid="stSegmentedControl"] button[aria-selected="true"],
+        div[data-testid="stSegmentedControl"] button[data-checked="true"] {
+            background: #DCE2F9 !important;
+            color: #151B2C !important;
+            border: 1px solid transparent !important;
+            font-weight: 700 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+        }
+        div[data-testid="stSegmentedControl"] button[aria-selected="true"]::before,
+        div[data-testid="stSegmentedControl"] button[data-checked="true"]::before {
+            content: "✓ " !important;
+            font-weight: 800 !important;
+            margin-right: 4px !important;
+            color: #151B2C !important;
         }
 
         /* MD3 Right Detail Panel */
@@ -652,43 +712,87 @@ def _install_styles() -> None:
             color: #FFFFFF !important;
         }
 
-        /* MD3 Return Button */
+        /* MD3 Top App Bar & Circular Return Button */
+        div[class*="st-key-technical-back-btn"] {
+            display: flex !important;
+            align-items: center !important;
+            margin-bottom: 0.5rem !important;
+        }
         div[class*="st-key-technical-back-btn"] button {
-            border-radius: 9999px !important;
-            background: var(--md3-primary) !important;
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
-            font-size: 0.84rem !important;
+            border-radius: 50% !important;
+            width: 42px !important;
             height: 42px !important;
+            min-width: 42px !important;
             min-height: 42px !important;
-            padding: 0 1.6rem !important;
+            padding: 0 !important;
+            background: #EADDFF !important;
+            color: #21005D !important;
             border: none !important;
             box-shadow: var(--md3-shadow-1) !important;
-            margin-bottom: 0.6rem !important;
             display: inline-flex !important;
             align-items: center !important;
-            gap: 0.4rem !important;
+            justify-content: center !important;
             transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
         }
         div[class*="st-key-technical-back-btn"] button:hover {
-            background: #005096 !important;
+            background: #D0BCFF !important;
             box-shadow: var(--md3-shadow-2) !important;
-            transform: translateY(-1px) !important;
-            color: #FFFFFF !important;
+            transform: scale(1.06) !important;
+            color: #21005D !important;
+        }
+        .technical-appbar-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            margin-bottom: 0.5rem;
+        }
+        .technical-appbar-sub {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--md3-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .technical-appbar-title {
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin: 0;
+            line-height: 1.2;
+            color: #1A1C1E;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .technical-appbar-age {
+            font-size: 0.76rem;
+            font-weight: 600;
+            color: #44474E;
+            background: #E9EFF6;
+            padding: 0.15rem 0.6rem;
+            border-radius: 9999px;
+        }
+        .technical-appbar-chip-wrapper {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            margin-right: 5rem;
+        }
+        .technical-appbar-chip {
+            background: #FFFFFF;
+            border: 1px solid #74777F;
+            border-radius: 9999px;
+            padding: 0.35rem 0.95rem;
+            font-size: 0.76rem;
+            font-weight: 600;
+            color: #44474E;
+            box-shadow: var(--md3-shadow-1);
+            white-space: nowrap;
         }
 
         .technical-resident-context {
-            align-items: center;
-            background: var(--md3-surface-container);
-            border-left: 4px solid var(--md3-primary);
-            border-radius: 12px;
-            display: flex;
-            justify-content: space-between;
-            margin: 0.55rem 0 0.75rem;
-            padding: 0.65rem 0.95rem;
+            display: none !important;
         }
-        .technical-resident-context strong { font-size: 0.9rem; }
-        .technical-resident-context span { color: #44474E; font-size: 0.72rem; }
         .simulation-notice {
             background: #FFF4E5;
             border: 1px solid #FFE0B2;
@@ -836,19 +940,23 @@ def _install_styles() -> None:
         .state-hero-pill.safe, .state-hero-pill.connected { background: var(--md3-success-container); color: var(--md3-on-success-container); }
         .state-hero-pill.warning { background: #FFDCC2; color: #311100; }
         .state-hero-pill.danger { background: var(--md3-error); color: #FFFFFF; animation: clinical-pulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1); }
-        .detail-list { display: flex; flex-direction: column; gap: 0.35rem; }
+        .detail-list { display: flex; flex-direction: column; gap: 6px; }
         .detail-row {
             align-items: center;
-            background: #F8F9FE;
+            background: #F1F4F9;
             border-radius: 12px;
             display: flex;
             justify-content: space-between;
-            min-height: 40px;
-            padding: 0.45rem 0.85rem;
+            min-height: 42px;
+            padding: 8px 14px;
             border: none;
+            transition: background 0.15s ease;
         }
-        .detail-row span { color: #44474E; font-size: 0.76rem; font-weight: 500; }
-        .detail-row strong { font-size: 0.86rem; color: #1A1C1E; font-weight: 700; overflow-wrap: anywhere; text-align: right; }
+        .detail-row:nth-child(even) {
+            background: #E9EFF6;
+        }
+        .detail-row span { color: #44474E; font-size: 0.78rem; font-weight: 500; }
+        .detail-row strong { font-size: 0.88rem; color: #1A1C1E; font-weight: 700; overflow-wrap: anywhere; text-align: right; }
         .coordinate-stats-wrapper {
             background: #E9EFF6;
             border-radius: 16px;
@@ -962,31 +1070,50 @@ def _install_styles() -> None:
         .coordinate-empty strong { font-size: 1rem; color: #1A1C1E; }
         .coordinate-empty span { color: #44474E; font-size: 0.76rem; margin-top: 0.35rem; }
         .ai-entry {
-            background: #F0F4F9;
-            border-radius: 14px;
+            background: #F3EDF7;
+            border-radius: 16px;
             margin: 8px 0;
             padding: 10px 14px;
             border: none;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-            transition: transform 0.15s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
         .ai-entry:hover {
             transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         }
         .ai-entry-head { align-items: center; display: flex; justify-content: space-between; gap: 0.5rem; }
         .ai-entry-status {
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: 0.35rem;
             color: #008744;
-            font-size: 0.72rem;
+            font-size: 0.74rem;
             font-weight: 750;
         }
         .ai-entry-status.danger { color: var(--md3-error); }
         .ai-entry-status.warning { color: #D97706; }
         .ai-entry-time { color: #74777F; font-size: 0.68rem; font-weight: 500; }
         .ai-entry p { font-size: 0.82rem; line-height: 1.45; margin: 0.35rem 0; color: #1A1C1E; }
-        .ai-entry-meta { color: #74777F; font-size: 0.68rem; overflow-wrap: anywhere; }
+        .ai-entry-meta {
+            color: #74777F;
+            font-size: 0.68rem;
+            overflow-wrap: anywhere;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+            margin-top: 0.25rem;
+        }
+        .ai-entry-code {
+            background: #E6E0E9;
+            color: #1D1B20;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.66rem;
+            font-weight: 600;
+            padding: 0.12rem 0.45rem;
+            border-radius: 6px;
+        }
         .subsection-heading {
             align-items: baseline;
             border-bottom: 1px solid var(--line);
@@ -1575,13 +1702,14 @@ def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
             f"{entry.inference_ms:.1f} ms" if entry.inference_ms is not None else "waiting"
         )
         repeat = f" · merged {entry.occurrences}" if entry.occurrences > 1 else ""
-        dot_html = f'<span style="width:7px;height:7px;border-radius:50%;background:{dot_color};display:inline-block;margin-right:5px;"></span>'
+        dot_html = f'<span style="width:8px;height:8px;border-radius:50%;background:{dot_color};display:inline-block;margin-right:6px;flex-shrink:0;"></span>'
+        code_tag = f'<span class="ai-entry-code">input {entry.is_fall} → {result}</span>'
         blocks.append(
             '<div class="ai-entry"><div class="ai-entry-head">'
             f'<span class="ai-entry-status {css_class}">{dot_html}{escape(status)}</span>'
             f'<span class="ai-entry-time">{escape(_short_time(entry.timestamp))}</span></div>'
             f'<p>{escape(message)}</p>'
-            f'<div class="ai-entry-meta">input {entry.is_fall} → result {result} · '
+            f'<div class="ai-entry-meta">{code_tag} · '
             f'{escape(model)} · {escape(latency)}{escape(repeat)}</div></div>'
         )
     st.markdown("".join(blocks), unsafe_allow_html=True)

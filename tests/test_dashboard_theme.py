@@ -76,3 +76,45 @@ def test_axis_chart_uses_three_dark_mode_accent_colors() -> None:
         DARK_PALETTE.axis_blue,
     ]
     assert spec["config"]["legend"]["labelColor"] == DARK_PALETTE.ink
+
+
+def test_show_ai_timeline_renders_html() -> None:
+    from ld6002c_fall.live_monitor import AIChatEntry
+    from dashboard.app import _show_ai_timeline
+    from unittest.mock import patch
+
+    entries = [
+        AIChatEntry(
+            timestamp="2026-09-22T08:00:00+08:00",
+            is_fall=1,
+            result=1,
+            status="FALL_DETECTED",
+            model="qwen3:0.6b",
+            message="检测到疑似跌倒事件",
+            trigger="PERIODIC",
+            occurrences=2,
+            inference_ms=12.5,
+        ),
+        AIChatEntry(
+            timestamp="2026-09-22T08:00:01+08:00",
+            is_fall=0,
+            result=0,
+            status="FALLBACK",
+            model="",
+            message="规则引擎判定",
+            trigger="PERIODIC",
+            occurrences=1,
+            inference_ms=None,
+        ),
+    ]
+
+    rendered: list[str] = []
+    with patch("dashboard.app.st.markdown", side_effect=lambda html, **_: rendered.append(html)):
+        _show_ai_timeline(entries)
+
+    assert len(rendered) == 1
+    assert "merged 2" in rendered[0]
+    assert "ai-entry-code" in rendered[0]
+    assert "input 1 → 1" in rendered[0]
+    assert "input 0 → 0" in rendered[0]
+
