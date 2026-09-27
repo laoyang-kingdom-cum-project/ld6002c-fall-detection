@@ -7,6 +7,7 @@ from .models import (
     CommunityStatus,
     DemoResponseMode,
     DemoScenario,
+    PostureEvent,
     Resident,
     ResidentState,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "DemoControlService",
     "DemoResponseMode",
     "DemoScenario",
+    "PostureEvent",
     "Resident",
     "ResidentState",
     "SIMULATED_SOURCE",

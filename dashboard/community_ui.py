@@ -41,6 +41,7 @@ EVENT_LABELS = {
     "DEVICE_OFFLINE": "设备离线",
     "DEVICE_ONLINE": "设备上线",
     "DEMO_INJECTED": "演示数据注入",
+    "BEND_SIMULATED": "弯腰姿态（演示）",
 }
 
 
@@ -53,12 +54,20 @@ def render_community_dashboard(
     _select_latest_alarm(controller, states)
 
     fall_count = sum(state.status == "FALL" for state in states.values())
+    bend_count = sum(state.posture_event == "BEND" for state in states.values())
     if fall_count > 0:
         alert_text = f"【紧急警报】当前社区检测到 {fall_count} 处跌倒报警事件，请立即处置并调度网格员！"
         st.markdown(
             f'<div class="current-alert danger">'
             f'<span class="status-badge alarm">● 跌倒报警 ALARM ({fall_count})</span>&nbsp;&nbsp;'
             f'<span>{escape(alert_text)}</span></div>',
+            unsafe_allow_html=True,
+        )
+    elif bend_count > 0:
+        st.markdown(
+            '<div class="current-alert posture">'
+            f'<span class="status-badge posture">● 姿态关注 ({bend_count})</span>&nbsp;&nbsp;'
+            '<span>当前为课堂模拟弯腰姿态，安全状态仍为正常，未触发跌倒报警。</span></div>',
             unsafe_allow_html=True,
         )
     else:
@@ -86,82 +95,127 @@ def render_demo_console(
     controller: CommunityController,
     _theme: Mapping[str, str],
 ) -> None:
-    st.markdown(
-        '<div class="section-heading"><div><div class="section-kicker">Demo Control</div>'
-        '<h2>社区演示数据控制台</h2></div>'
-        '<span>演示覆盖会保持到“恢复正常”</span></div>',
-        unsafe_allow_html=True,
-    )
-    _render_runtime_health()
-    default_mode = os.getenv("LD6002C_DEMO_RESPONSE_MODE", "DIRECT").upper()
-    if default_mode not in {"DIRECT", "AI"}:
-        default_mode = "DIRECT"
-    response_mode = st.segmented_control(
-        "演示响应模式",
-        options=["DIRECT", "AI"],
-        default=default_mode,
-        format_func=lambda value: (
-            "即时演示" if value == "DIRECT" else "AI完整链路"
-        ),
-        selection_mode="single",
-        key="demo_response_mode",
-    )
-    selected_response_mode: DemoResponseMode = (
-        "AI" if response_mode == "AI" else "DIRECT"
-    )
-    st.caption(
-        "即时演示会立即应用状态，并以 SIMULATED AI TRACE 展示分析过程；"
-        "AI完整链路会等待本机 Ollama / Qwen 返回。"
-    )
-    residents = controller.registry.residents
-    labels = {
-        resident.id: f"{resident.address}  {resident.name} · {resident.age}岁"
-        for resident in residents
-    }
-    selected_id = st.selectbox(
-        "住户选择",
-        options=[resident.id for resident in residents],
-        format_func=labels.__getitem__,
-        key="demo_resident_id",
-    )
-    resident = controller.registry.get(selected_id)
-    source_text = (
-        f"真实绑定：{resident.sensor_binding} · 当前操作为演示覆盖"
-        if resident.has_live_sensor
-        else "数据来源：模拟社区监护点"
-    )
-    st.caption(source_text)
+    with st.container(key="demo-runtime-health"):
+        _render_runtime_health()
 
-    actions: tuple[tuple[str, DemoAction, str], ...] = (
-        ("发送正常数据", "NORMAL", ":material/check_circle:"),
-        ("发送跌倒数据", "FALL", ":material/warning:"),
-        ("发送疑似异常", "WARNING", ":material/error:"),
-        ("模拟设备离线", "OFFLINE", ":material/link_off:"),
-        ("恢复正常", "RECOVER", ":material/restart_alt:"),
-        ("确认报警", "ACKNOWLEDGE", ":material/done_all:"),
-    )
-    for row in range(2):
-        columns = st.columns(3, gap="small")
-        for column, (label, action, icon) in zip(columns, actions[row * 3 : row * 3 + 3]):
-            with column:
-                if st.button(
-                    label,
-                    key=f"demo-action-{action}",
-                    icon=icon,
-                    width="stretch",
-                ):
-                    result = _execute_demo_action(
-                        controller,
-                        selected_id,
-                        action,
-                        response_mode=selected_response_mode,
-                    )
-                    st.session_state["demo_last_result"] = result
-                    st.rerun()
+    with st.container(key="demo-scenario-controls"):
+        st.markdown(
+            '<div class="demo-control-section-title"><div>'
+            '<span>演示设置</span><strong>响应方式与目标住户</strong></div>'
+            '<small>演示覆盖会保持到“恢复正常”</small></div>',
+            unsafe_allow_html=True,
+        )
+        default_mode = os.getenv("LD6002C_DEMO_RESPONSE_MODE", "DIRECT").upper()
+        if default_mode not in {"DIRECT", "AI"}:
+            default_mode = "DIRECT"
+        with st.container(key="demo-configuration"):
+            mode_column, voice_column = st.columns([1.55, 1], gap="medium")
+            with mode_column:
+                response_mode = st.segmented_control(
+                    "演示响应模式",
+                    options=["DIRECT", "AI"],
+                    default=default_mode,
+                    format_func=lambda value: (
+                        "即时演示" if value == "DIRECT" else "AI完整链路"
+                    ),
+                    selection_mode="single",
+                    key="demo_response_mode",
+                )
+            with voice_column:
+                voice_announcement_requested = st.toggle(
+                    "状态语音播报",
+                    value=False,
+                    key="demo_voice_announcement",
+                )
+                st.caption(
+                    "开启：状态变化时播报"
+                    if voice_announcement_requested
+                    else "关闭：仅界面展示"
+                )
+            selected_response_mode: DemoResponseMode = (
+                "AI" if response_mode == "AI" else "DIRECT"
+            )
+            st.markdown(
+                '<p class="demo-mode-description">'
+                '即时演示立即应用状态，以 SIMULATED AI TRACE 展示分析过程；'
+                'AI 完整链路会等待本机 Ollama / Qwen 返回。'
+                '弯腰为课堂模拟姿态，不调用真实雷达 / AI 判断链路。</p>',
+                unsafe_allow_html=True,
+            )
+            residents = controller.registry.residents
+            labels = {
+                resident.id: f"{resident.address}  {resident.name} · {resident.age}岁"
+                for resident in residents
+            }
+            selected_id = st.selectbox(
+                "住户选择",
+                options=[resident.id for resident in residents],
+                format_func=labels.__getitem__,
+                key="demo_resident_id",
+            )
+            resident = controller.registry.get(selected_id)
+            source_text = (
+                f"真实绑定：{resident.sensor_binding} · 当前操作为演示覆盖"
+                if resident.has_live_sensor
+                else "数据来源：模拟社区监护点"
+            )
+            st.markdown(
+                f'<p class="demo-resident-source">{escape(source_text)}</p>',
+                unsafe_allow_html=True,
+            )
 
-    _render_demo_result(st.session_state.get("demo_last_result"))
+        st.markdown(
+            '<div class="demo-control-section-title demo-action-title"><div>'
+            '<span>场景操作</span><strong>注入一次演示状态</strong></div>'
+            '<small>跌倒场景会触发完整告警流程</small></div>',
+            unsafe_allow_html=True,
+        )
+
+        actions: tuple[tuple[str, DemoAction, str], ...] = (
+            ("发送正常数据", "NORMAL", ":material/check_circle:"),
+            ("发送跌倒数据", "FALL", ":material/warning:"),
+            ("发送疑似异常", "WARNING", ":material/error:"),
+            ("模拟弯腰", "BEND", ":material/accessibility_new:"),
+            ("模拟设备离线", "OFFLINE", ":material/link_off:"),
+            ("恢复正常", "RECOVER", ":material/restart_alt:"),
+            ("确认报警", "ACKNOWLEDGE", ":material/done_all:"),
+        )
+        action_rows = (actions[:4], actions[4:])
+        for action_row in action_rows:
+            columns = st.columns(len(action_row), gap="small")
+            for column, (label, action, icon) in zip(columns, action_row):
+                with column:
+                    if st.button(
+                        label,
+                        key=f"demo-action-{action}",
+                        icon=icon,
+                        width="stretch",
+                    ):
+                        result = _execute_demo_action(
+                            controller,
+                            selected_id,
+                            action,
+                            response_mode=selected_response_mode,
+                            voice_announcement_requested=voice_announcement_requested,
+                        )
+                        st.session_state["demo_last_result"] = result
+                        st.rerun()
+
+        _render_demo_result(st.session_state.get("demo_last_result"))
+
+    _render_demo_current_state(controller, selected_id)
+
+
+@st.fragment(run_every=0.5)
+def _render_demo_current_state(
+    controller: CommunityController,
+    resident_id: str,
+) -> None:
+    """Refresh applied runtime state without replaying control side effects."""
+
     states = controller.states()
-    _render_demo_state(controller, states[selected_id])
+    with st.container(key="demo-current-state"):
+        _render_demo_state(controller, states[resident_id])
 
 
 def _render_statistics(
@@ -178,11 +232,31 @@ def _render_statistics(
     )
     current_alerts = sum(state.status == "FALL" for state in states.values())
     statistics = (
-        ("监护住户", len(controller.registry.residents), "stat-neutral"),
-        ("在线设备", sum(state.status != "OFFLINE" for state in states.values()), "stat-neutral"),
-        ("正常住户", sum(state.status in {"NORMAL", "RECOVERED"} for state in states.values()), "stat-normal"),
-        ("当前报警", current_alerts, "stat-red" if current_alerts > 0 else "stat-neutral"),
-        ("今日报警", today_alerts, "stat-red" if today_alerts > 0 else "stat-neutral"),
+        ("监护住户", len(controller.registry.residents), "stat-secondary"),
+        (
+            "在线设备",
+            sum(state.status != "OFFLINE" for state in states.values()),
+            "stat-tertiary",
+        ),
+        (
+            "正常住户",
+            sum(
+                state.status in {"NORMAL", "RECOVERED"}
+                and state.posture_event == "NONE"
+                for state in states.values()
+            ),
+            "stat-success",
+        ),
+        (
+            "当前报警",
+            current_alerts,
+            "stat-error" if current_alerts > 0 else "stat-neutral",
+        ),
+        (
+            "今日报警",
+            today_alerts,
+            "stat-warning",
+        ),
     )
     cards = "".join(
         f'<div class="community-stat {css_class}"><span>'
@@ -214,13 +288,14 @@ def _render_resident_matrix(
     ) or "全部"
 
     def _matches_filter(res: Resident) -> bool:
-        st_val = states[res.id].status
+        state = states[res.id]
+        st_val = state.status
         if selected_filter == "全部":
             return True
         if selected_filter == "正常":
-            return st_val in {"NORMAL", "RECOVERED"}
+            return st_val in {"NORMAL", "RECOVERED"} and state.posture_event == "NONE"
         if selected_filter == "关注":
-            return st_val in {"FALL", "WARNING"}
+            return st_val in {"FALL", "WARNING"} or state.posture_event == "BEND"
         if selected_filter == "离线":
             return st_val == "OFFLINE"
         return True
@@ -238,16 +313,22 @@ def _render_resident_matrix(
             state = states[resident.id]
             selected = st.session_state.get("selected_resident_id") == resident.id
             selected_class = "-selected" if selected else ""
-            signal_icon = "📶" if state.status != "OFFLINE" else "📵"
+            visual_state = "bend" if state.posture_event == "BEND" else state.status.lower()
             with column:
                 with st.container(
-                    key=f"resident-card-{state.status.lower()}{selected_class}-{resident.id}"
+                    key=f"resident-card-{visual_state}{selected_class}-{resident.id}"
                 ):
-                    status_label = STATUS_LABELS[state.status]
+                    status_label = (
+                        "弯腰姿态 · 演示"
+                        if state.posture_event == "BEND"
+                        else STATUS_LABELS[state.status]
+                    )
                     handled = " · 已确认" if state.status == "FALL" and state.handled else ""
                     time_label = _short_time(state.alarm_time or state.updated_at)
                     if selected:
                         indicator = "✓ 已选择"
+                    elif state.posture_event == "BEND":
+                        indicator = "● 弯腰姿态"
                     elif state.status in {"NORMAL", "RECOVERED"}:
                         indicator = "● 安全监护"
                     elif state.status == "FALL":
@@ -257,9 +338,9 @@ def _render_resident_matrix(
                     else:
                         indicator = "○ 设备离线"
                     label = (
-                        f"{resident.address}  {signal_icon}\n"
-                        f"{resident.name} · {resident.age}岁\n"
-                        f"[{indicator}] {status_label}{handled} · {time_label}"
+                        f"{resident.address}\n"
+                        f"**{resident.name} · {resident.age}岁**\n"
+                        f"{indicator} · {status_label}{handled} · {time_label}"
                     )
                     if st.button(
                         label,
@@ -292,7 +373,7 @@ def _render_operation_buttons(
             ):
                 st.toast(
                     f"【历史健康档案】已调取住户 {resident.name} ({resident.address}) 近 30 天跌倒风险与活动节律报告。",
-                    icon="📋",
+                    icon=":material/history_edu:",
                 )
     with col2:
         with st.container(key="community-bottom-btn-2"):
@@ -304,7 +385,7 @@ def _render_operation_buttons(
             ):
                 st.toast(
                     f"【紧急呼叫】正在一键拨打住户 {resident.name} 的紧急联系人家属电话...",
-                    icon="📞",
+                    icon=":material/phone_in_talk:",
                 )
     with col3:
         with st.container(key="community-bottom-btn-3"):
@@ -319,9 +400,14 @@ def _render_operation_buttons(
                     advice = "高危跌倒事件：建议立即指派网格员上门，协助老人保持平躺并拨打 120 检查髋关节与头部。"
                 elif current_status == "WARNING":
                     advice = "疑似姿态异常：建议通过室内可视对讲核实老人状态，关注防滑拖鞋与夜起照明。"
+                elif state is not None and state.posture_event == "BEND":
+                    advice = "弯腰姿态为课堂模拟事件：可用于演示日常姿态提醒，不代表跌倒或医疗判断。"
                 else:
                     advice = "日常健康监护：该住户活动指标正常，建议维持每日晨间起居步态监测与室内通道无障碍防跌倒巡查。"
-                st.toast(f"【AI 护理建议】{advice}", icon="💡")
+                st.toast(
+                    f"【AI 护理建议】{advice}",
+                    icon=":material/psychology:",
+                )
 
 
 def _render_selected_resident(
@@ -411,6 +497,9 @@ def _render_resident_status_capsule(state: ResidentState) -> None:
     elif state.status == "OFFLINE":
         badge_class = "offline"
         badge_text = "✕ 雷达传感器离线"
+    elif state.posture_event == "BEND":
+        badge_class = "posture"
+        badge_text = "● 检测到弯腰姿态 · 课堂模拟"
     else:
         badge_class = "safe"
         badge_text = "● 正常监护中 · 生命体征平稳"
@@ -427,23 +516,35 @@ def _render_resident_summary(resident: Resident, state: ResidentState) -> None:
     alarm_time = _short_time(state.alarm_time) if state.alarm_time else "--:--:--"
     radar = _result_label(state.radar_result)
     ai = _result_label(state.ai_result)
+    alarm_semantic = (
+        "alarm-error"
+        if state.status == "FALL"
+        else "alarm-warning" if state.status == "WARNING" else "neutral"
+    )
+    process_semantic = "process-success" if state.handled else "neutral"
+    posture = "BEND · 模拟" if state.posture_event == "BEND" else "NONE"
     rows = [
-        ("老人姓名", resident.name),
-        ("年龄", f"{resident.age} 岁"),
-        ("雷达状态", radar),
-        ("AI 智能研判", ai),
-        ("推理模型", _business_model(state.ai_model)),
-        ("报警时间", alarm_time),
-        ("处理状态", "已确认" if state.handled else "待处理"),
-        ("数据信道", state.source),
+        ("老人姓名", resident.name, "identity"),
+        ("年龄", f"{resident.age} 岁", "identity"),
+        ("雷达状态", radar, "radar"),
+        ("AI 智能研判", ai, "ai"),
+        ("推理模型", _business_model(state.ai_model), "model"),
+        ("报警时间", alarm_time, alarm_semantic),
+        (
+            "处理状态",
+            "已确认" if state.handled else "待处理",
+            process_semantic,
+        ),
+        ("数据信道", state.source, "channel"),
+        ("姿态事件", posture, "posture"),
     ]
 
     items_html = "".join(
-        '<div class="resident-summary-item">'
+        f'<div class="resident-summary-item resident-summary-{semantic}">'
         f'<span>{escape(label)}</span>'
         f'<strong>{escape(str(value))}</strong>'
         f'</div>'
-        for label, value in rows
+        for label, value, semantic in rows
     )
     st.markdown(
         '<div class="resident-summary-grid">'
@@ -477,6 +578,14 @@ def _render_resident_height_chart(
                 height = 1.48 * (1.0 - decay) + 0.30 * decay
             else:
                 height = 0.30 + 0.03 * ((i % 3) - 1)
+        elif state.posture_event == "BEND":
+            if i < 12:
+                height = 1.46 + 0.04 * ((i % 4) - 1.5)
+            elif i < 20:
+                decay = (i - 12) / 8.0
+                height = 1.46 * (1.0 - decay) + 0.90 * decay
+            else:
+                height = 0.90 + 0.05 * ((i % 3) - 1)
         elif state.status == "WARNING":
             if i < 15:
                 height = 1.45 + 0.05 * ((i % 4) - 1.5)
@@ -496,9 +605,9 @@ def _render_resident_height_chart(
             x=df["time"],
             y=df["height"],
             mode="lines",
-            line=dict(color=theme["terra"], width=3.5, shape="spline"),
+            line=dict(color=theme["secondary"], width=3.5, shape="spline"),
             fill="tozeroy",
-            fillcolor=theme["chart_fill"],
+            fillcolor=_color_with_alpha(theme["secondary"], 0.14),
             name="离地高度",
             hovertemplate="%{x|%H:%M:%S}<br>高度: %{y:.2f} m<extra></extra>",
         )
@@ -513,13 +622,13 @@ def _render_resident_height_chart(
         annotation_font=dict(size=10, color=theme["danger"], family="sans-serif"),
     )
     fig.update_layout(
-        height=155,
+        height=135,
         margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor=theme["surface_container_high"],
         plot_bgcolor=theme["surface_container_high"],
         xaxis=dict(
             showgrid=True,
-            gridcolor=theme["line"],
+            gridcolor=theme["chart_grid"],
             gridwidth=1,
             griddash="dot",
             tickformat="%H:%M:%S",
@@ -528,7 +637,7 @@ def _render_resident_height_chart(
         ),
         yaxis=dict(
             showgrid=True,
-            gridcolor=theme["line"],
+            gridcolor=theme["chart_grid"],
             gridwidth=1,
             griddash="dot",
             range=[0.0, 2.0],
@@ -543,6 +652,21 @@ def _render_resident_height_chart(
         showlegend=False,
     )
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def _color_with_alpha(color: str, alpha: float) -> str:
+    """Convert a palette hex color to an rgba value for Plotly fills."""
+
+    normalized = color.removeprefix("#")
+    if len(normalized) != 6:
+        return color
+    try:
+        red, green, blue = (
+            int(normalized[index : index + 2], 16) for index in (0, 2, 4)
+        )
+    except ValueError:
+        return color
+    return f"rgba({red}, {green}, {blue}, {alpha:.2f})"
 
 
 def _render_recent_events(
@@ -605,11 +729,13 @@ def _execute_demo_action(
     action: DemoAction,
     *,
     response_mode: DemoResponseMode | None = None,
+    voice_announcement_requested: bool = False,
 ) -> DemoControlResult:
     return DemoControlService(controller).execute(
         resident_id,
         action,
         response_mode=response_mode,
+        voice_announcement_requested=voice_announcement_requested,
     )
 
 
@@ -618,11 +744,14 @@ def _render_demo_result(result: object) -> None:
         return
     if result.ai_result is None:
         mode = result.state.demo_response_mode or "DIRECT"
-        mode_label = (
-            "即时演示 · SIMULATED AI TRACE"
-            if mode == "DIRECT"
-            else "AI完整链路 · REAL AI"
-        )
+        if result.action == "BEND":
+            mode_label = "模拟弯腰姿态 · DEMO ONLY"
+        else:
+            mode_label = (
+                "即时演示 · SIMULATED AI TRACE"
+                if mode == "DIRECT"
+                else "AI完整链路 · REAL AI"
+            )
         st.success(
             f"场景请求已写入：{result.action} · {mode_label}，后台监测服务正在应用。"
         )
@@ -643,15 +772,28 @@ def _render_demo_result(result: object) -> None:
 def _render_demo_state(controller: CommunityController, state: ResidentState) -> None:
     resident = controller.registry.get(state.resident_id)
     st.markdown(
-        '<div class="section-heading compact"><div><div class="section-kicker">Current State</div>'
+        '<div class="section-heading compact"><div><div class="section-kicker">当前状态</div>'
         f'<h2>{escape(resident.address)} · {escape(resident.name)}</h2></div>'
         f'<span>{escape(state.source)} · {_short_time(state.updated_at)}</span></div>',
         unsafe_allow_html=True,
     )
     _render_resident_summary(resident, state)
     mode = state.demo_response_mode or "DIRECT"
-    trace = "SIMULATED AI TRACE" if mode == "DIRECT" else "REAL AI"
-    st.caption(f"请求响应模式：{mode} · {trace} · 判定来源：{state.source}")
+    if state.posture_event == "BEND":
+        trace = "SIMULATED POSTURE EVENT"
+        mode_label = "模拟弯腰姿态"
+    else:
+        trace = "SIMULATED AI TRACE" if mode == "DIRECT" else "REAL AI"
+        mode_label = "即时演示" if mode == "DIRECT" else "AI完整链路"
+    st.markdown(
+        '<div class="demo-diagnostics">'
+        f'<span>{escape(mode_label)} · {escape(mode)}</span>'
+        f'<span>{escape(trace)}</span>'
+        f'<span>判定来源 · {escape(state.source)}</span>'
+        f'<span>状态语音 · {"开启" if state.voice_announcement_requested else "关闭"}</span>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def _render_runtime_health() -> None:
@@ -659,29 +801,78 @@ def _render_runtime_health() -> None:
         os.getenv("LD6002C_COMMUNITY_RUNTIME_PATH", str(DEFAULT_COMMUNITY_RUNTIME_PATH))
     ).read()
     st.markdown(
-        '<div class="section-heading compact"><div><div class="section-kicker">System Health</div>'
+        '<div class="section-heading compact"><div><div class="section-kicker">运行健康</div>'
         '<h2>后台服务状态</h2></div></div>',
         unsafe_allow_html=True,
     )
-    columns = st.columns(5, gap="small")
     values = (
-        ("Community Runtime", health.runtime),
-        ("Ollama", health.ollama),
-        ("Model", health.model),
-        ("Telemetry", health.telemetry),
-        ("Alarm", health.alarm),
+        ("Community Runtime", health.runtime, _runtime_health_tone(health.runtime)),
+        ("Ollama", health.ollama, _ollama_health_tone(health.ollama)),
+        ("Model", health.model, "health-model"),
+        ("Telemetry", health.telemetry, _telemetry_health_tone(health.telemetry)),
+        ("Alarm", health.alarm, _alarm_health_tone(health.alarm)),
+        ("Voice Backend", health.voice, _voice_health_tone(health.voice)),
     )
-    for column, (label, value) in zip(columns, values, strict=True):
-        column.metric(label, value)
+    cells = "".join(
+        '<div class="demo-health-cell '
+        f'{tone}"><span>{escape(label)}</span><strong>{escape(str(value))}</strong></div>'
+        for label, value, tone in values
+    )
+    st.markdown(
+        f'<div class="demo-health-grid">{cells}</div>',
+        unsafe_allow_html=True,
+    )
     ai_time = _short_time_value(health.last_ai_success or "")
-    st.caption(
-        f"Demo Response: {health.demo_response_mode} · AI Backend: {health.ai_mode} · "
-        f"Last real AI response: {ai_time}"
+    st.markdown(
+        '<div class="demo-health-meta">'
+        f'<span>演示响应 · {escape(health.demo_response_mode)}</span>'
+        f'<span>AI 后端 · {escape(health.ai_mode)}</span>'
+        f'<span>最近真实 AI 响应 · {escape(ai_time)}</span>'
+        "</div>",
+        unsafe_allow_html=True,
     )
     if health.last_ai_error:
-        st.warning(f"AI backend: {health.last_ai_error}")
+        st.markdown(
+            '<div class="demo-health-banner warning"><strong>AI 后端提示</strong>'
+            f'<span>{escape(health.last_ai_error)}</span></div>',
+            unsafe_allow_html=True,
+        )
     if health.last_runtime_error:
-        st.error(f"Runtime: {health.last_runtime_error}")
+        st.markdown(
+            '<div class="demo-health-banner error"><strong>Runtime 异常</strong>'
+            f'<span>{escape(health.last_runtime_error)}</span></div>',
+            unsafe_allow_html=True,
+        )
+    if health.voice in {"CONSOLE", "UNAVAILABLE"}:
+        st.caption("语音播报不可用，将保留控制台文本输出。")
+
+
+def _runtime_health_tone(value: str) -> str:
+    if value == "RUNNING":
+        return "health-success"
+    if value in {"FAILED", "ERROR", "STOPPED"}:
+        return "health-error"
+    return "health-neutral"
+
+
+def _ollama_health_tone(value: str) -> str:
+    if value == "ONLINE":
+        return "health-success"
+    if value == "OFFLINE":
+        return "health-warning"
+    return "health-neutral"
+
+
+def _telemetry_health_tone(value: str) -> str:
+    return "health-tertiary" if value == "ACTIVE" else "health-neutral"
+
+
+def _alarm_health_tone(value: str) -> str:
+    return "health-primary" if value == "READY" else "health-neutral"
+
+
+def _voice_health_tone(value: str) -> str:
+    return "health-tertiary" if value == "READY" else "health-neutral"
 
 
 def _result_label(value: int | None) -> str:

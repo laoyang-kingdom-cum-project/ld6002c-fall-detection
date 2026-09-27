@@ -13,6 +13,7 @@ from .models import (
     CommunityStatus,
     DemoResponseMode,
     DemoScenario,
+    PostureEvent,
     Resident,
     ResidentState,
     local_now,
@@ -95,7 +96,9 @@ class CommunityController:
                 handled=False if entering_fall else previous.handled,
                 updated_at=timestamp,
                 source=source,
+                posture_event="NONE",
                 demo_override=False,
+                voice_announcement_requested=False,
             )
 
         previous, updated = self.state_store.update(resident_id, apply)
@@ -146,6 +149,8 @@ class CommunityController:
         details: str = "",
         demo_override: bool = True,
         applied_scenario_revision: int | None = None,
+        applied_scenario: DemoScenario | None = None,
+        posture_event: PostureEvent = "NONE",
     ) -> tuple[ResidentState, bool]:
         """Apply a demo value and return the lock-protected fall transition."""
 
@@ -167,9 +172,13 @@ class CommunityController:
                 handled=False if entering_fall else previous.handled,
                 updated_at=now,
                 source=source,
+                posture_event=posture_event,
                 demo_override=demo_override,
                 desired_scenario=(
-                    status if status in {"NORMAL", "WARNING", "FALL", "OFFLINE"}
+                    applied_scenario
+                    if applied_scenario is not None
+                    else status
+                    if status in {"NORMAL", "WARNING", "FALL", "OFFLINE"}
                     else previous.desired_scenario
                 ),
                 applied_scenario_revision=(
@@ -187,6 +196,22 @@ class CommunityController:
             source,
             details or json.dumps({"status": status}, ensure_ascii=False),
         )
+        if posture_event == "BEND":
+            self._log(
+                resident,
+                updated,
+                "BEND_SIMULATED",
+                source,
+                details
+                or json.dumps(
+                    {
+                        "posture_event": "BEND",
+                        "simulated": True,
+                        "sensor_capability": "DEMO_ONLY",
+                    },
+                    ensure_ascii=False,
+                ),
+            )
         self._log_transition(resident, previous, updated, source, details)
         return updated, previous.status != "FALL" and updated.status == "FALL"
 
@@ -198,6 +223,7 @@ class CommunityController:
         timestamp: datetime | None = None,
         demo_override: bool = True,
         response_mode: DemoResponseMode | None = None,
+        voice_announcement_requested: bool = False,
     ) -> ResidentState:
         """Persist an operator request without applying the business transition."""
 
@@ -209,6 +235,7 @@ class CommunityController:
                 previous,
                 desired_scenario=scenario,
                 demo_response_mode=response_mode,
+                voice_announcement_requested=voice_announcement_requested,
                 scenario_revision=previous.scenario_revision + 1,
                 updated_at=now,
                 source="DEMO_REQUEST",
@@ -258,7 +285,9 @@ class CommunityController:
                 handled=False,
                 updated_at=now,
                 source=source,
+                posture_event="NONE",
                 demo_override=False,
+                voice_announcement_requested=False,
             )
 
         previous, updated = self.state_store.update(resident_id, apply)

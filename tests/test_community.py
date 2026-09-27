@@ -54,6 +54,37 @@ def test_state_store_initializes_every_resident_and_persists_json(tmp_path) -> N
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_old_persisted_state_defaults_new_posture_and_voice_fields(tmp_path) -> None:
+    state_path = tmp_path / "community_state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "community_name": "幸福社区",
+                "residents": {
+                    "B1-101": {
+                        "resident_id": "B1-101",
+                        "status": "NORMAL",
+                        "desired_scenario": "NORMAL",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    controller = CommunityController.from_paths(
+        ROOT / "config" / "community.json",
+        state_path,
+        tmp_path / "community_events.csv",
+    )
+
+    state = controller.states()["B1-101"]
+    assert state.posture_event == "NONE"
+    assert state.voice_announcement_requested is False
+
+
 def test_real_sensor_maps_confirmed_fall_to_b2_302_and_logs_event(tmp_path) -> None:
     controller = make_controller(tmp_path)
 

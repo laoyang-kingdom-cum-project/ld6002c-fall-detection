@@ -31,6 +31,8 @@ EventName = Literal[
     "FALL_CONFIRMED",
     "WARNING_CONFIRMED",
     "NORMAL_CONFIRMED",
+    "BEND_SIMULATED",
+    "VOICE_ANNOUNCEMENT",
 ]
 
 

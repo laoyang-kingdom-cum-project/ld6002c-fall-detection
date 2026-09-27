@@ -310,9 +310,11 @@ python -m streamlit run dashboard/app.py --server.port 8501
 - **演示控制台**：只负责切换任意住户的期望场景，并显示 runtime、Ollama、模型、遥测和报警健康状态。AI 推理、业务状态迁移、遥测与报警均由 launcher 所属 runtime 处理，Streamlit rerun 不会重复报警。
 - **技术详情**：任意住户都复用同一套雷达链路、业务判断、点云投影、XYZ 趋势、实时数据总线和原始日志渲染器，页面本身只读。`B2-302` 仅在 `fall_log.csv` 最后一帧不超过 5 秒且无演示覆盖时使用真实数据；真实日志过期时自动改读带课堂模拟标记的遥测。
 
-“发送跌倒数据”只写入 `desired_scenario=FALL`。后台 runtime 观察到版本变化后构造 `is_fall=1` 并调用与真实雷达相同的 `OllamaFallAI`；Qwen3 返回合法结果时记录 `DEMO_AI`，不可用或返回非法结构时使用雷达输入安全回退并保留真实 `AI_ERROR` / `AI_FALLBACK` 诊断事件。runtime 每 0.5 秒追加一帧并原子保留最近 60 帧，所以 NORMAL、FALL 和恢复过程会共同留在短期 XYZ 历史中。离线场景只追加一次断开帧，随后停止产生新点云。
+演示控制台只写入 `desired_scenario` 和请求版本，状态应用、遥测、AI 与输出均由后台 runtime 负责。默认 `DIRECT` 模式不等待 Ollama，并以 `DEMO_DIRECT` / `SIMULATED AI TRACE` 标记课堂演示；只有选择“AI完整链路”时，NORMAL/FALL 才会实际调用 `OllamaFallAI`，并如实记录 `DEMO_AI`、`AI_RESPONSE` 或 `AI_FALLBACK`。runtime 每 0.5 秒追加一帧并原子保留最近 60 帧，所以 NORMAL、FALL 和恢复过程会共同留在短期 XYZ 历史中。离线场景只追加一次断开帧，随后停止产生新点云。
 
-电脑语音只在住户首次进入 `FALL` 时触发一次；在状态仍为 `FALL` 时重复点击不会重播。“确认报警”和“恢复正常”都会关闭当前播放；后者还会清除真实住户的演示覆盖。
+“模拟弯腰”是 **DEMO ONLY / SIMULATED POSTURE EVENT**。当前 LD6002C 协议路径没有提供项目可直接使用的弯腰判定字段，因此 `BEND` 仅由 Community Demo Runtime 生成教学点云和姿态事件，不会标记为 LD6002C 原生能力或 Qwen 真实判断。它保持 `status=NORMAL`、`posture_event=BEND`、`radar_result=0`、`ai_result=0`，即使控制台选择“AI完整链路”也不调用 Ollama，不计入当前报警或今日报警。
+
+跌倒紧急报警与状态语音是两条独立输出链。`FALL` 仍只使用原有 `AlarmOutput` / `DesktopAudioAlarm` / `ffplay` 播放报警音；控制台的“状态语音播报”默认关闭，开启后只在 BEND、WARNING、OFFLINE、NORMAL/RECOVER 的请求版本被 runtime 真正应用时播报一次，不会在遥测 tick 中重复。Windows 使用本机 PowerShell `System.Speech` 非阻塞启动，不增加 Python 依赖；后端不可用时仅输出 `[Voice] ...` 控制台文本，不会阻断状态迁移或跌倒报警。“确认报警”和“恢复正常”仍会关闭当前跌倒报警音；后者还会清除真实住户的演示覆盖。
 
 首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`；`data/community_runtime.json` 保存 heartbeat、Ollama、模型、AI 模式、遥测和报警 health。状态和遥测使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半份数据。社区事件写入 `data/community_events.csv`；分住户技术帧与 AI/报警事件写入 `data/community_telemetry/<resident>.csv` 和 `<resident>.events.csv`。可通过 `COMMUNITY_TELEMETRY_INTERVAL`、`COMMUNITY_TELEMETRY_MAX_FRAMES` 和 `REAL_TELEMETRY_STALE_SECONDS` 调整默认的 0.5 秒、60 帧和 5 秒阈值。
 

@@ -8,7 +8,8 @@ from typing import Any, Literal, Mapping
 
 
 CommunityStatus = Literal["NORMAL", "WARNING", "FALL", "OFFLINE", "RECOVERED"]
-DemoScenario = Literal["NORMAL", "WARNING", "FALL", "OFFLINE"]
+PostureEvent = Literal["NONE", "BEND"]
+DemoScenario = Literal["NORMAL", "WARNING", "FALL", "BEND", "OFFLINE"]
 DemoResponseMode = Literal["DIRECT", "AI"]
 CommunityEventName = Literal[
     "FALL_ALERT",
@@ -17,10 +18,12 @@ CommunityEventName = Literal[
     "DEVICE_OFFLINE",
     "DEVICE_ONLINE",
     "DEMO_INJECTED",
+    "BEND_SIMULATED",
 ]
 
 VALID_STATUSES = {"NORMAL", "WARNING", "FALL", "OFFLINE", "RECOVERED"}
-VALID_SCENARIOS = {"NORMAL", "WARNING", "FALL", "OFFLINE"}
+VALID_POSTURE_EVENTS = {"NONE", "BEND"}
+VALID_SCENARIOS = {"NORMAL", "WARNING", "FALL", "BEND", "OFFLINE"}
 VALID_DEMO_RESPONSE_MODES = {"DIRECT", "AI"}
 
 
@@ -87,9 +90,11 @@ class ResidentState:
     handled: bool = False
     updated_at: datetime = field(default_factory=local_now)
     source: str = "INITIAL"
+    posture_event: PostureEvent = "NONE"
     demo_override: bool = False
     desired_scenario: DemoScenario = "NORMAL"
     demo_response_mode: DemoResponseMode | None = None
+    voice_announcement_requested: bool = False
     scenario_revision: int = 0
     applied_scenario_revision: int = 0
 
@@ -100,6 +105,8 @@ class ResidentState:
             raise ValueError("radar_result must be None, 0, or 1")
         if self.ai_result not in (None, 0, 1):
             raise ValueError("ai_result must be None, 0, or 1")
+        if self.posture_event not in VALID_POSTURE_EVENTS:
+            raise ValueError(f"Unsupported posture event: {self.posture_event}")
         if self.desired_scenario not in VALID_SCENARIOS:
             raise ValueError(f"Unsupported demo scenario: {self.desired_scenario}")
         if (
@@ -126,9 +133,11 @@ class ResidentState:
             "handled": self.handled,
             "updated_at": _format_datetime(self.updated_at),
             "source": self.source,
+            "posture_event": self.posture_event,
             "demo_override": self.demo_override,
             "desired_scenario": self.desired_scenario,
             "demo_response_mode": self.demo_response_mode,
+            "voice_announcement_requested": self.voice_announcement_requested,
             "scenario_revision": self.scenario_revision,
             "applied_scenario_revision": self.applied_scenario_revision,
         }
@@ -163,6 +172,11 @@ class ResidentState:
             raise ValueError(
                 f"Unsupported demo response mode for {resident_id}: {response_mode}"
             )
+        posture_event = str(value.get("posture_event", "NONE")).upper()
+        if posture_event not in VALID_POSTURE_EVENTS:
+            raise ValueError(
+                f"Unsupported posture event for {resident_id}: {posture_event}"
+            )
         return cls(
             resident_id=resident_id,
             status=status,  # type: ignore[arg-type]
@@ -174,9 +188,13 @@ class ResidentState:
             handled=bool(value.get("handled", False)),
             updated_at=_parse_datetime(value.get("updated_at")) or local_now(),
             source=str(value.get("source") or "INITIAL"),
+            posture_event=posture_event,  # type: ignore[arg-type]
             demo_override=bool(value.get("demo_override", False)),
             desired_scenario=desired_scenario,  # type: ignore[arg-type]
             demo_response_mode=response_mode,  # type: ignore[arg-type]
+            voice_announcement_requested=bool(
+                value.get("voice_announcement_requested", False)
+            ),
             scenario_revision=scenario_revision,
             applied_scenario_revision=min(applied_revision, scenario_revision),
         )

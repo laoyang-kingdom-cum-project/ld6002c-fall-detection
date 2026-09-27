@@ -39,6 +39,7 @@ from .config import (
     DEFAULT_OLLAMA_TIMEOUT,
     DEFAULT_REAL_TELEMETRY_STALE_SECONDS,
 )
+from .voice_announcement import build_voice_announcement
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -154,12 +155,14 @@ def main() -> None:
             if args.audio_alarm
             else ConsoleAlarm()
         )
+        voice_announcement = build_voice_announcement()
         runtime = CommunityDemoRuntime(
             controller,
             telemetry,
             health_store,
             ai=ai,
             alarm=alarm,
+            voice_announcement=voice_announcement,
             interval_seconds=args.telemetry_interval,
             real_log_path=args.real_log_path,
             real_stale_seconds=args.real_stale_seconds,
@@ -201,6 +204,7 @@ def main() -> None:
                 ollama_status=_ready_ollama_status(runtime_health.ollama),
                 model=args.ollama_model,
                 demo_response_mode=args.demo_response_mode.upper(),
+                voice_status=runtime_health.voice,
                 community_name=controller.registry.community_name,
                 resident_count=len(controller.registry.residents),
             )
@@ -350,6 +354,7 @@ def _print_ready_urls(
     ollama_status: str,
     model: str,
     demo_response_mode: str,
+    voice_status: str,
     community_name: str,
     resident_count: int,
 ) -> None:
@@ -361,6 +366,7 @@ def _print_ready_urls(
     print(f"Ollama            : {ollama_status}")
     print(f"Model             : {model}")
     print(f"Demo Response     : {demo_response_mode}")
+    print(f"Voice Backend     : {voice_status}")
     print(f"Community         : {community_name}")
     print(f"Residents         : {resident_count}")
     print(f"Dashboard         : {local_url}/")

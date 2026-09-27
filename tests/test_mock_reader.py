@@ -62,3 +62,18 @@ def test_community_warning_cloud_has_mid_height_centroid() -> None:
     z_center = sum(point.z for point in frame.points) / len(frame.points)
     assert 0.7 <= z_center <= 1.0
     assert frame.motion_state == "unstable"
+
+
+def test_community_bend_cloud_is_between_normal_and_fall_heights() -> None:
+    normal = build_mock_radar_frame("NORMAL", 3.0)
+    bend = build_mock_radar_frame("BEND", 3.0)
+    fall = build_mock_radar_frame("FALL", 3.0)
+
+    assert max(fall.points, key=lambda point: point.z).z < max(
+        bend.points, key=lambda point: point.z
+    ).z < max(normal.points, key=lambda point: point.z).z
+    assert 0.9 <= max(point.z for point in bend.points) <= 1.2
+    assert bend.human_present is True
+    assert bend.fall_detected is False
+    assert bend.motion_state == "bending"
+    assert "status=BEND" in bend.raw

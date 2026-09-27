@@ -26,7 +26,7 @@ SIMULATED_SOURCE_LABEL = "SIMULATED RADAR DATA · CLASSROOM DEMO"
 class CommunityTelemetryStore:
     """Persist bounded demo frames and events for each community resident."""
 
-    fieldnames = ["resident_id", *CSVFrameLogger.fieldnames]
+    fieldnames = ["resident_id", *CSVFrameLogger.fieldnames, "posture_event"]
 
     def __init__(
         self,
@@ -250,11 +250,13 @@ def _frame_row(
         "NORMAL": "正常有人",
         "WARNING": "疑似跌倒",
         "FALL": "确认跌倒",
+        "BEND": "弯腰姿态（演示）",
     }[status]
     device_state = {
         "NORMAL": "NORMAL",
         "WARNING": "SUSPECTED_FALL",
         "FALL": "CONFIRMED_FALL",
+        "BEND": "NORMAL",
     }[status]
     final_result = int(status == "FALL" and ai_result.result == 1)
     if ai_result.model == "demo-direct":
@@ -307,6 +309,7 @@ def _frame_row(
             ensure_ascii=True,
             separators=(",", ":"),
         ),
+        "posture_event": "BEND" if status == "BEND" else "NONE",
     }
 
 

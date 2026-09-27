@@ -9,7 +9,7 @@ from typing import Literal
 from .radar_model import RadarFrame, RadarPoint
 
 MockScenario = Literal["empty", "normal", "fall-demo", "presence-demo"]
-MockRadarStatus = Literal["NORMAL", "WARNING", "FALL"]
+MockRadarStatus = Literal["NORMAL", "WARNING", "FALL", "BEND"]
 MOCK_SCENARIOS: tuple[MockScenario, ...] = (
     "empty",
     "normal",
@@ -119,8 +119,8 @@ def build_mock_radar_frame(
 ) -> RadarFrame:
     """Build one deterministic community-demo frame from the existing mock model."""
 
-    if status not in {"NORMAL", "WARNING", "FALL"}:
-        raise ValueError("status must be NORMAL, WARNING, or FALL")
+    if status not in {"NORMAL", "WARNING", "FALL", "BEND"}:
+        raise ValueError("status must be NORMAL, WARNING, FALL, or BEND")
     if elapsed_seconds < 0:
         raise ValueError("elapsed_seconds must be non-negative")
 
@@ -129,6 +129,7 @@ def build_mock_radar_frame(
         "NORMAL": "moving",
         "WARNING": "unstable",
         "FALL": "still",
+        "BEND": "bending",
     }[status]
     return RadarFrame(
         timestamp=timestamp or datetime.now().astimezone(),
@@ -157,6 +158,10 @@ def _points_for_status(
         x_offsets = (-0.32, -0.20, -0.10, 0.0, 0.12, 0.24, 0.34)
         z_values = (0.52, 0.65, 0.75, 0.85, 0.95, 1.05, 1.12)
         speed = 0.08
+    elif status == "BEND":
+        x_offsets = (-0.30, -0.22, -0.14, -0.04, 0.09, 0.25, 0.42)
+        z_values = (0.28, 0.46, 0.64, 0.79, 0.92, 1.03, 1.10)
+        speed = 0.10
     else:
         x_offsets = (-0.06, 0.04, -0.05, 0.05, -0.04, 0.03, 0.0)
         z_values = (0.28, 0.52, 0.78, 1.04, 1.30, 1.55, 1.76)

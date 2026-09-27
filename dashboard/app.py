@@ -55,9 +55,15 @@ LOG_PATH = Path(os.getenv("LD6002C_LOG_PATH", PROJECT_ROOT / "data" / "fall_log.
 EVENT_LOG_PATH = Path(
     os.getenv("LD6002C_EVENT_LOG_PATH", PROJECT_ROOT / "data" / "events.csv")
 )
-LIVE_REFRESH_SECONDS = float(os.getenv("DASHBOARD_REFRESH_SECONDS", "2.0"))
-COMMUNITY_REFRESH_SECONDS = float(os.getenv("COMMUNITY_REFRESH_SECONDS", "1.5"))
-LOG_REFRESH_SECONDS = float(os.getenv("DASHBOARD_LOG_REFRESH_SECONDS", "5.0"))
+
+
+def _refresh_interval(env_name: str, default: float) -> float:
+    return float(os.getenv(env_name, str(default)))
+
+
+LIVE_REFRESH_SECONDS = _refresh_interval("DASHBOARD_REFRESH_SECONDS", 2.0)
+COMMUNITY_REFRESH_SECONDS = _refresh_interval("COMMUNITY_REFRESH_SECONDS", 0.5)
+LOG_REFRESH_SECONDS = _refresh_interval("DASHBOARD_LOG_REFRESH_SECONDS", 5.0)
 DASHBOARD_MAX_ROWS = int(os.getenv("DASHBOARD_MAX_ROWS", "600"))
 
 
@@ -160,50 +166,50 @@ LIGHT_PALETTE = ThemePalette(
 
 DARK_PALETTE = ThemePalette(
     mode="dark",
-    canvas="#111318",
-    surface="#191C20",
-    surface_container_low="#1D2024",
-    surface_container="#212429",
-    surface_container_high="#2B2F33",
-    surface_container_highest="#353A3F",
-    surface_soft="#1D2024",
+    canvas="#10141D",
+    surface="#171B24",
+    surface_container_low="#1B202A",
+    surface_container="#202630",
+    surface_container_high="#29313D",
+    surface_container_highest="#333C49",
+    surface_soft="#1B202A",
     ink="#E2E2E6",
     muted="#C2C7CE",
-    line="#42474E",
+    line="#444A55",
     outline="#8C9198",
-    primary_container="#2F4778",
-    on_primary="#17305F",
-    on_primary_container="#D9E2FF",
-    secondary="#BEC6E0",
-    secondary_container="#41485F",
-    on_secondary_container="#DAE2FC",
-    tertiary="#DFB8D7",
-    tertiary_container="#594056",
-    on_tertiary_container="#FCD4F4",
-    warning="#E8C17D",
-    warning_container="#4A3820",
-    on_warning_container="#FFDEA6",
-    success="#AACBA4",
-    success_container="#30442F",
-    on_success_container="#C5E8BF",
-    on_error="#690005",
-    error_container="#93000A",
+    primary_container="#284777",
+    on_primary="#0B305F",
+    on_primary_container="#D8E2FF",
+    secondary="#D0BCFF",
+    secondary_container="#4F3F78",
+    on_secondary_container="#EADDFF",
+    tertiary="#80D5D1",
+    tertiary_container="#17504F",
+    on_tertiary_container="#A4F2EE",
+    warning="#FFB95F",
+    warning_container="#624000",
+    on_warning_container="#FFE0B2",
+    success="#8ED69F",
+    success_container="#1C5130",
+    on_success_container="#C8F2D1",
+    on_error="#601410",
+    error_container="#7A2930",
     on_error_container="#FFDAD6",
-    header_background="rgba(17, 19, 24, 0.96)",
-    terra="#ADC7FF",
-    sage="#BEC6E0",
-    amber="#E8C17D",
+    header_background="rgba(16, 20, 29, 0.96)",
+    terra="#A8C7FA",
+    sage="#80D5D1",
+    amber="#FFB95F",
     danger="#FFB4AB",
-    axis_blue="#DFB8D7",
-    chart_background="#2B2F33",
-    chart_fill="rgba(173, 199, 255, 0.18)",
-    chart_line="#42474E",
+    axis_blue="#D0BCFF",
+    chart_background="#29313D",
+    chart_fill="rgba(168, 199, 250, 0.16)",
+    chart_line="#444A55",
     chart_axis="#C2C7CE",
-    chart_grid="#42474E",
-    terminal_background="#15171B",
+    chart_grid="rgba(140, 145, 152, 0.18)",
+    terminal_background="#141922",
     terminal_text="#E2E2E6",
-    terminal_line="#353A3F",
-    terminal_accent="#ADC7FF",
+    terminal_line="#333C49",
+    terminal_accent="#A8C7FA",
 )
 
 
@@ -300,18 +306,18 @@ def main() -> None:
         ),
         "control": (
             "社区安全演示控制台",
-            "Classroom Scenario Injection Console",
-            "DEMO CONTROL",
+            "用于模拟不同场景，验证识别与告警流程",
+            "演示控制",
         ),
         "technical": (
             "LD6002C 毫米波雷达技术详情",
-            "Radar, AI, Point Cloud and Raw Data",
-            "TECHNICAL MONITOR",
+            "毫米波雷达、AI、点云与原始数据",
+            "技术详情",
         ),
     }[view]
     st.markdown(
         f"""
-        <header class="wall-header">
+        <header class="wall-header wall-header-{escape(view)}">
           <div>
             <div class="wall-kicker">{escape(header[1])}</div>
             <h1>{escape(header[0])}</h1>
@@ -411,7 +417,7 @@ def _show_technical_detail(
     with top_bar_col3:
         st.markdown(
             f'<div class="technical-appbar-chip-wrapper">'
-            f'<span class="technical-appbar-chip">⚡ {escape(data_source)}</span>'
+            f'<span class="technical-appbar-chip">数据源 · {escape(data_source)}</span>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -583,14 +589,30 @@ def _install_styles() -> None:
             padding: 0.85rem 1.1rem;
             color: var(--md3-on-surface);
         }
-        .community-stat.stat-normal strong {
-            color: var(--md3-success);
+        .community-stat.stat-primary {
+            background: var(--md3-primary-container);
+            color: var(--md3-on-primary-container);
         }
-        .community-stat.stat-red {
+        .community-stat.stat-secondary {
+            background: var(--md3-secondary-container);
+            color: var(--md3-on-secondary-container);
+        }
+        .community-stat.stat-tertiary {
+            background: var(--md3-tertiary-container);
+            color: var(--md3-on-tertiary-container);
+        }
+        .community-stat.stat-success {
+            background: var(--md3-success-container);
+            color: var(--md3-on-success-container);
+        }
+        .community-stat.stat-warning {
+            background: var(--md3-warning-container);
+            color: var(--md3-on-warning-container);
+        }
+        .community-stat.stat-error {
             background: var(--md3-error-container);
             color: var(--md3-on-error-container);
         }
-        .community-stat.stat-red strong { color: var(--md3-error); }
         .community-stat span {
             color: inherit;
             opacity: 0.85;
@@ -667,6 +689,18 @@ def _install_styles() -> None:
             color: inherit !important;
             font-weight: 500 !important;
         }
+        div[class*="st-key-resident-card-normal"] button,
+        div[class*="st-key-resident-card-recovered"] button {
+            background: color-mix(in srgb, var(--md3-success-container) 26%, var(--md3-surface-container)) !important;
+        }
+        div[class*="st-key-resident-card-normal"] button:hover,
+        div[class*="st-key-resident-card-recovered"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, color-mix(in srgb, var(--md3-success-container) 26%, var(--md3-surface-container))) !important;
+        }
+        div[class*="st-key-resident-card-normal"] button:active,
+        div[class*="st-key-resident-card-recovered"] button:active {
+            background: color-mix(in srgb, var(--md3-on-surface) 12%, color-mix(in srgb, var(--md3-success-container) 26%, var(--md3-surface-container))) !important;
+        }
         div[class*="st-key-resident-card-warning"] button {
             background: var(--md3-warning-container) !important;
             color: var(--md3-on-warning-container) !important;
@@ -681,19 +715,19 @@ def _install_styles() -> None:
             color: var(--md3-on-surface-variant) !important;
             opacity: 0.72 !important;
         }
-        /* Selected cards use tonal elevation plus a stable leading indicator. */
+        /* The text checkmark is the selected indicator; the container supplies tonal state. */
         div[class*="-selected-"] button {
             background: var(--md3-primary-container) !important;
             color: var(--md3-on-primary-container) !important;
-            box-shadow: inset 4px 0 0 var(--md3-primary) !important;
+            box-shadow: none !important;
         }
         div[class*="-selected-"] button:hover {
             background: color-mix(in srgb, var(--md3-on-primary-container) 8%, var(--md3-primary-container)) !important;
-            box-shadow: inset 4px 0 0 var(--md3-primary) !important;
+            box-shadow: none !important;
         }
         div[class*="-selected-"] button:active {
             background: color-mix(in srgb, var(--md3-on-primary-container) 12%, var(--md3-primary-container)) !important;
-            box-shadow: inset 4px 0 0 var(--md3-primary) !important;
+            box-shadow: none !important;
         }
         div[class*="-selected-"] button p {
             color: inherit !important;
@@ -702,17 +736,17 @@ def _install_styles() -> None:
         div[class*="st-key-resident-card-warning-selected"] button {
             background: var(--md3-warning-container) !important;
             color: var(--md3-on-warning-container) !important;
-            box-shadow: inset 4px 0 0 var(--md3-warning) !important;
+            box-shadow: none !important;
         }
         div[class*="st-key-resident-card-fall-selected"] button {
             background: var(--md3-error-container) !important;
             color: var(--md3-on-error-container) !important;
-            box-shadow: inset 4px 0 0 var(--md3-error) !important;
+            box-shadow: none !important;
         }
         div[class*="st-key-resident-card-offline-selected"] button {
             background: var(--md3-surface-container-highest) !important;
             color: var(--md3-on-surface-variant) !important;
-            box-shadow: inset 4px 0 0 var(--md3-outline) !important;
+            box-shadow: none !important;
             opacity: 1 !important;
         }
         div[class*="st-key-resident-card-warning"] button:hover,
@@ -805,8 +839,11 @@ def _install_styles() -> None:
             border: 0 !important;
             border-radius: 24px !important;
             min-height: 480px !important;
-            padding: 1.5rem !important;
+            padding: 1rem !important;
             box-shadow: none !important;
+        }
+        .st-key-community-detail-panel > div > [data-testid="stVerticalBlock"] {
+            gap: 0.75rem !important;
         }
         .st-key-community-detail-panel .panel-heading {
             margin-bottom: 0.5rem;
@@ -823,6 +860,8 @@ def _install_styles() -> None:
         div[class*="st-key-community-rec-btn"] button,
         div[class*="st-key-community-tech-btn"] button,
         div[class*="st-key-demo-action-"] button {
+            --action-container: var(--md3-secondary-container);
+            --action-on-container: var(--md3-on-secondary-container);
             height: 44px !important;
             min-height: 44px !important;
             border-radius: 22px !important;
@@ -830,8 +869,8 @@ def _install_styles() -> None:
             font-size: 0.82rem !important;
             border: none !important;
             letter-spacing: 0.02em !important;
-            background: var(--md3-secondary-container) !important;
-            color: var(--md3-on-secondary-container) !important;
+            background: var(--action-container) !important;
+            color: var(--action-on-container) !important;
             box-shadow: none !important;
             transition: background-color var(--md3-motion), color var(--md3-motion) !important;
         }
@@ -840,7 +879,7 @@ def _install_styles() -> None:
         div[class*="st-key-community-rec-btn"] button:hover,
         div[class*="st-key-community-tech-btn"] button:hover,
         div[class*="st-key-demo-action-"] button:hover {
-            background: color-mix(in srgb, var(--md3-on-secondary-container) 8%, var(--md3-secondary-container)) !important;
+            background: color-mix(in srgb, var(--action-on-container) 8%, var(--action-container)) !important;
             box-shadow: none !important;
         }
         div[class*="st-key-community-bottom-btn-"] button:active,
@@ -848,7 +887,7 @@ def _install_styles() -> None:
         div[class*="st-key-community-rec-btn"] button:active,
         div[class*="st-key-community-tech-btn"] button:active,
         div[class*="st-key-demo-action-"] button:active {
-            background: color-mix(in srgb, var(--md3-on-secondary-container) 12%, var(--md3-secondary-container)) !important;
+            background: color-mix(in srgb, var(--action-on-container) 12%, var(--action-container)) !important;
         }
         div[class*="st-key-community-bottom-btn-"] button:focus-visible,
         div[class*="st-key-community-ack-btn"] button:focus-visible,
@@ -865,35 +904,26 @@ def _install_styles() -> None:
         div[class*="st-key-demo-action-"] button:disabled {
             opacity: 0.38 !important;
         }
+        div[class*="st-key-community-bottom-btn-1"] button {
+            --action-container: var(--md3-secondary-container);
+            --action-on-container: var(--md3-on-secondary-container);
+        }
+        div[class*="st-key-community-bottom-btn-2"] button {
+            --action-container: var(--md3-tertiary-container);
+            --action-on-container: var(--md3-on-tertiary-container);
+        }
+        div[class*="st-key-community-bottom-btn-3"] button,
+        div[class*="st-key-community-tech-btn"] button {
+            --action-container: var(--md3-primary-container);
+            --action-on-container: var(--md3-on-primary-container);
+        }
         div[class*="st-key-community-ack-btn"] button {
-            background: var(--md3-error) !important;
-            color: var(--md3-on-error) !important;
+            --action-container: var(--md3-error-container);
+            --action-on-container: var(--md3-on-error-container);
         }
         div[class*="st-key-community-rec-btn"] button {
-            background: var(--md3-surface-container-highest) !important;
-            color: var(--md3-primary) !important;
-        }
-        div[class*="st-key-community-tech-btn"] button {
-            background: var(--md3-primary) !important;
-            color: var(--md3-on-primary) !important;
-        }
-        div[class*="st-key-community-ack-btn"] button:hover {
-            background: color-mix(in srgb, var(--md3-on-error) 8%, var(--md3-error)) !important;
-        }
-        div[class*="st-key-community-ack-btn"] button:active {
-            background: color-mix(in srgb, var(--md3-on-error) 12%, var(--md3-error)) !important;
-        }
-        div[class*="st-key-community-rec-btn"] button:hover {
-            background: color-mix(in srgb, var(--md3-primary) 8%, var(--md3-surface-container-highest)) !important;
-        }
-        div[class*="st-key-community-rec-btn"] button:active {
-            background: color-mix(in srgb, var(--md3-primary) 12%, var(--md3-surface-container-highest)) !important;
-        }
-        div[class*="st-key-community-tech-btn"] button:hover {
-            background: color-mix(in srgb, var(--md3-on-primary) 8%, var(--md3-primary)) !important;
-        }
-        div[class*="st-key-community-tech-btn"] button:active {
-            background: color-mix(in srgb, var(--md3-on-primary) 12%, var(--md3-primary)) !important;
+            --action-container: var(--md3-secondary-container);
+            --action-on-container: var(--md3-on-secondary-container);
         }
 
         /* MD3 Top App Bar & Circular Return Button */
@@ -1261,6 +1291,19 @@ def _install_styles() -> None:
             border: none;
             box-shadow: none;
         }
+        @keyframes trace-step-reveal {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .ai-entry.trace-sequenced {
+            animation: trace-step-reveal 180ms cubic-bezier(0.2, 0, 0, 1) both;
+        }
+        .ai-entry.trace-step-0 { animation-delay: 0ms; }
+        .ai-entry.trace-step-1 { animation-delay: 70ms; }
+        .ai-entry.trace-step-2 { animation-delay: 140ms; }
+        .ai-entry.trace-step-3 { animation-delay: 210ms; }
+        .ai-entry.trace-step-4 { animation-delay: 280ms; }
+        .ai-entry.trace-step-5 { animation-delay: 350ms; }
         .ai-entry-head { align-items: center; display: flex; justify-content: space-between; gap: 0.5rem; }
         .ai-entry-status {
             display: inline-flex;
@@ -1458,7 +1501,7 @@ def _install_styles() -> None:
             margin: 0.2rem 0 0;
         }
         .resident-detail-note { font-weight: 600; }
-        .resident-status-wrap { margin: 0.2rem 0 0.85rem; text-align: center; }
+        .resident-status-wrap { margin: 0.15rem 0 0.55rem; text-align: center; }
         .resident-status-capsule {
             display: inline-block;
             padding: 0.5rem 1rem;
@@ -1467,8 +1510,8 @@ def _install_styles() -> None:
             font-weight: 700;
         }
         .resident-status-capsule.safe {
-            background: var(--md3-surface-container-highest);
-            color: var(--md3-success);
+            background: var(--md3-success-container);
+            color: var(--md3-on-success-container);
         }
         .resident-status-capsule.warning {
             background: var(--md3-warning-container);
@@ -1483,11 +1526,15 @@ def _install_styles() -> None:
             background: var(--md3-surface-container-highest);
             color: var(--md3-on-surface-variant);
         }
+        .resident-status-capsule.posture {
+            background: var(--md3-tertiary-container);
+            color: var(--md3-on-tertiary-container);
+        }
         .resident-summary-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.45rem;
-            margin-bottom: 0.75rem;
+            gap: 0.35rem;
+            margin-bottom: 0.55rem;
         }
         .resident-summary-item {
             background: var(--md3-surface-container-highest);
@@ -1495,7 +1542,7 @@ def _install_styles() -> None:
             display: flex;
             flex-direction: column;
             gap: 0.15rem;
-            padding: 0.5rem 0.65rem;
+            padding: 0.4rem 0.65rem;
         }
         .resident-summary-item span {
             color: var(--md3-on-surface-variant);
@@ -1508,6 +1555,62 @@ def _install_styles() -> None:
             font-size: 0.84rem;
             font-weight: 700;
             overflow-wrap: anywhere;
+        }
+        .resident-summary-radar {
+            background: var(--md3-tertiary-container);
+        }
+        .resident-summary-radar span,
+        .resident-summary-radar strong {
+            color: var(--md3-on-tertiary-container);
+        }
+        .resident-summary-ai {
+            background: var(--md3-primary-container);
+        }
+        .resident-summary-ai span,
+        .resident-summary-ai strong {
+            color: var(--md3-on-primary-container);
+        }
+        .resident-summary-model {
+            background: var(--md3-secondary-container);
+        }
+        .resident-summary-model span,
+        .resident-summary-model strong {
+            color: var(--md3-on-secondary-container);
+        }
+        .resident-summary-alarm-error {
+            background: var(--md3-error-container);
+        }
+        .resident-summary-alarm-error span,
+        .resident-summary-alarm-error strong {
+            color: var(--md3-on-error-container);
+        }
+        .resident-summary-alarm-warning {
+            background: var(--md3-warning-container);
+        }
+        .resident-summary-alarm-warning span,
+        .resident-summary-alarm-warning strong {
+            color: var(--md3-on-warning-container);
+        }
+        .resident-summary-process-success {
+            background: var(--md3-success-container);
+        }
+        .resident-summary-process-success span,
+        .resident-summary-process-success strong {
+            color: var(--md3-on-success-container);
+        }
+        .resident-summary-channel {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 72%, var(--md3-surface-container-highest));
+        }
+        .resident-summary-channel span,
+        .resident-summary-channel strong {
+            color: var(--md3-on-tertiary-container);
+        }
+        .resident-summary-posture {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 62%, var(--md3-surface-container-highest));
+        }
+        .resident-summary-posture span,
+        .resident-summary-posture strong {
+            color: var(--md3-on-tertiary-container);
         }
         .resident-chart-heading {
             align-items: center;
@@ -1526,12 +1629,1020 @@ def _install_styles() -> None:
             font-size: 0.68rem;
             font-weight: 700;
         }
+
+        /* The manually approved Community palette is also the Control source of truth. */
+        .wall-header-community,
+        .wall-header-control,
+        .wall-header-technical,
+        .st-key-community-demo-control,
+        .st-key-technical-page,
+        .st-key-community-dashboard {
+            color-scheme: dark;
+            --canvas: #111318;
+            --md3-surface: #181A20;
+            --md3-surface-container-low: #1D2026;
+            --md3-surface-container: #23262D;
+            --md3-surface-container-high: #2B2E36;
+            --md3-surface-container-highest: #343740;
+            --md3-on-surface: #E5E1EA;
+            --md3-on-surface-variant: #C9C5D0;
+            --md3-outline: #918F9A;
+            --md3-outline-variant: #474751;
+            --md3-primary: #C9BEFF;
+            --md3-primary-container: #4D426F;
+            --md3-on-primary-container: #E9E2FF;
+            --md3-secondary: #BDC9F2;
+            --md3-secondary-container: #3D4867;
+            --md3-on-secondary-container: #DEE5FF;
+            --md3-tertiary: #85D5CC;
+            --md3-tertiary-container: #22544F;
+            --md3-on-tertiary-container: #A9F2E8;
+            --md3-success: #9BD5A4;
+            --md3-success-container: #285234;
+            --md3-on-success-container: #BDF2C5;
+            --md3-warning: #F0C06A;
+            --md3-warning-container: #624A18;
+            --md3-on-warning-container: #FFE2A5;
+            --md3-error: #FFB4AB;
+            --md3-error-container: #733236;
+            --md3-on-error-container: #FFDAD6;
+        }
+        [data-testid="stAppViewContainer"]:has(.st-key-community-dashboard),
+        [data-testid="stMain"]:has(.st-key-community-dashboard),
+        [data-testid="stAppViewContainer"]:has(.st-key-community-demo-control),
+        [data-testid="stMain"]:has(.st-key-community-demo-control),
+        [data-testid="stAppViewContainer"]:has(.st-key-technical-page),
+        [data-testid="stMain"]:has(.st-key-technical-page) {
+            background: #111318;
+        }
+        [data-testid="stMainBlockContainer"]:has(.st-key-community-demo-control) {
+            padding-top: 2.2rem !important;
+            padding-bottom: 1rem !important;
+        }
+        .wall-header-community,
+        .wall-header-control,
+        .wall-header-technical {
+            border-bottom-color: var(--md3-outline-variant);
+        }
+        .wall-header-community .wall-kicker,
+        .wall-header-control .wall-kicker,
+        .wall-header-technical .wall-kicker {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            opacity: 0.62;
+            text-transform: none;
+        }
+        .wall-header-community .wall-live,
+        .wall-header-control .wall-live,
+        .wall-header-technical .wall-live {
+            background: var(--md3-surface-container-low);
+            color: var(--md3-on-surface-variant);
+        }
+        .st-key-community-dashboard .current-alert {
+            border-radius: 18px;
+            background: var(--md3-surface-container-low);
+        }
+        .st-key-community-dashboard .status-badge.safe {
+            background: var(--md3-success-container) !important;
+            color: var(--md3-on-success-container) !important;
+        }
+        .st-key-community-dashboard .current-alert.posture {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 44%, var(--md3-surface-container-low));
+            color: var(--md3-on-tertiary-container);
+        }
+        .st-key-community-dashboard .status-badge.posture {
+            background: var(--md3-tertiary-container) !important;
+            color: var(--md3-on-tertiary-container) !important;
+        }
+        .st-key-community-dashboard .community-stat {
+            border-radius: 18px;
+            background: var(--md3-surface-container);
+        }
+        .st-key-community-dashboard .community-stat.stat-secondary {
+            background: color-mix(in srgb, var(--md3-secondary-container) 62%, var(--md3-surface-container));
+            color: var(--md3-on-secondary-container);
+        }
+        .st-key-community-dashboard .community-stat.stat-tertiary {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 62%, var(--md3-surface-container));
+            color: var(--md3-on-tertiary-container);
+        }
+        .st-key-community-dashboard .community-stat.stat-success {
+            background: color-mix(in srgb, var(--md3-success-container) 62%, var(--md3-surface-container));
+            color: var(--md3-on-success-container);
+        }
+        .st-key-community-dashboard .community-stat.stat-warning {
+            background: color-mix(in srgb, var(--md3-warning-container) 62%, var(--md3-surface-container));
+            color: var(--md3-on-warning-container);
+        }
+        .st-key-community-dashboard .community-stat.stat-error {
+            background: var(--md3-error-container);
+            color: var(--md3-on-error-container);
+        }
+        .st-key-community-dashboard .community-stat.stat-neutral {
+            background: var(--md3-surface-container-high);
+            color: var(--md3-on-surface);
+        }
+        .st-key-community-dashboard .community-stat span {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .st-key-community-dashboard .community-stat strong {
+            font-family: inherit;
+            font-size: 1.48rem;
+            font-weight: 750;
+        }
+        .st-key-community-dashboard .st-key-community-resident-area,
+        .st-key-community-dashboard .st-key-community-event-area {
+            background: var(--md3-surface-container-low);
+            border-radius: 24px;
+        }
+        .st-key-community-dashboard .section-kicker {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            opacity: 0.72;
+            text-transform: none;
+        }
+        .st-key-community-dashboard .section-heading h2 {
+            font-size: 1.08rem;
+            font-weight: 680;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-"] button {
+            background: var(--md3-surface-container) !important;
+            border-radius: 18px !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-"] button p {
+            font-size: 0.72rem !important;
+            font-weight: 500 !important;
+            line-height: 1.38 !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-"] button p strong {
+            color: inherit !important;
+            font-size: 0.87rem !important;
+            font-weight: 700 !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-normal"] button,
+        .st-key-community-dashboard div[class*="st-key-resident-card-recovered"] button {
+            background: color-mix(in srgb, var(--md3-success-container) 30%, var(--md3-surface-container)) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-normal"] button:hover,
+        .st-key-community-dashboard div[class*="st-key-resident-card-recovered"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, color-mix(in srgb, var(--md3-success-container) 30%, var(--md3-surface-container))) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-normal"] button:active,
+        .st-key-community-dashboard div[class*="st-key-resident-card-recovered"] button:active {
+            background: color-mix(in srgb, var(--md3-on-surface) 12%, color-mix(in srgb, var(--md3-success-container) 30%, var(--md3-surface-container))) !important;
+        }
+        .st-key-community-dashboard div[class*="-selected-"] button {
+            background: var(--md3-primary-container) !important;
+            color: var(--md3-on-primary-container) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-warning"] button {
+            background: var(--md3-warning-container) !important;
+            color: var(--md3-on-warning-container) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-bend"] button {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 72%, var(--md3-surface-container)) !important;
+            color: var(--md3-on-tertiary-container) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-bend"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-tertiary-container) 8%, color-mix(in srgb, var(--md3-tertiary-container) 72%, var(--md3-surface-container))) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-bend"] button:active {
+            background: color-mix(in srgb, var(--md3-on-tertiary-container) 12%, color-mix(in srgb, var(--md3-tertiary-container) 72%, var(--md3-surface-container))) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-fall"] button {
+            background: var(--md3-error-container) !important;
+            color: var(--md3-on-error-container) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-resident-card-offline"] button {
+            background: var(--md3-surface-container-high) !important;
+            color: var(--md3-on-surface-variant) !important;
+        }
+        .st-key-community-dashboard .st-key-community-detail-panel {
+            background: var(--md3-surface-container-high) !important;
+            border-radius: 24px !important;
+        }
+        .st-key-community-dashboard .resident-summary-item {
+            background: var(--md3-surface-container-highest);
+            border-radius: 15px;
+        }
+        .st-key-community-dashboard .resident-summary-identity {
+            background: var(--md3-surface-container-highest);
+            color: var(--md3-on-surface);
+        }
+        .st-key-community-dashboard .resident-summary-radar {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 52%, var(--md3-surface-container-highest));
+        }
+        .st-key-community-dashboard .resident-summary-ai {
+            background: color-mix(in srgb, var(--md3-primary-container) 58%, var(--md3-surface-container-highest));
+        }
+        .st-key-community-dashboard .resident-summary-model {
+            background: color-mix(in srgb, var(--md3-secondary-container) 52%, var(--md3-surface-container-highest));
+        }
+        .st-key-community-dashboard .resident-summary-process-success {
+            background: color-mix(in srgb, var(--md3-success-container) 52%, var(--md3-surface-container-highest));
+        }
+        .st-key-community-dashboard .resident-summary-channel {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 46%, var(--md3-surface-container-highest));
+        }
+        .st-key-community-dashboard .resident-summary-posture {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 56%, var(--md3-surface-container-highest));
+        }
+        .st-key-community-dashboard div[data-testid="stSegmentedControl"] button[aria-selected="true"],
+        .st-key-community-dashboard div[data-testid="stSegmentedControl"] button[data-checked="true"] {
+            background: var(--md3-primary-container) !important;
+            color: var(--md3-on-primary-container) !important;
+        }
+        .st-key-community-dashboard div[data-testid="stSegmentedControl"] button[aria-selected="true"]::before,
+        .st-key-community-dashboard div[data-testid="stSegmentedControl"] button[data-checked="true"]::before {
+            color: var(--md3-on-primary-container) !important;
+        }
+        .st-key-community-dashboard div[class*="st-key-community-bottom-btn-"] button,
+        .st-key-community-dashboard div[class*="st-key-community-ack-btn"] button,
+        .st-key-community-dashboard div[class*="st-key-community-rec-btn"] button,
+        .st-key-community-dashboard div[class*="st-key-community-tech-btn"] button {
+            border-radius: 23px !important;
+            letter-spacing: 0 !important;
+        }
+        .st-key-community-dashboard .st-key-community-event-area {
+            background: color-mix(in srgb, var(--md3-surface-container-low) 86%, var(--canvas));
+        }
+
+        /* Demo Control: same Material You system, denser engineering presentation. */
+        .st-key-community-demo-control {
+            background: transparent !important;
+            color: var(--md3-on-surface);
+            padding: 0 !important;
+        }
+        .st-key-community-demo-control > div > [data-testid="stVerticalBlock"] {
+            gap: 0.68rem !important;
+        }
+        .st-key-community-demo-control .section-heading {
+            border-bottom: 0;
+            margin-bottom: 0.48rem;
+            padding-bottom: 0;
+        }
+        .st-key-community-demo-control .section-heading.compact {
+            margin-top: 0;
+        }
+        .st-key-community-demo-control .section-kicker {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.66rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            opacity: 0.72;
+            text-transform: none;
+        }
+        .st-key-community-demo-control .section-heading h2 {
+            font-size: 1.08rem;
+            font-weight: 680;
+        }
+        .st-key-demo-runtime-health,
+        .st-key-demo-scenario-controls,
+        .st-key-demo-current-state {
+            border: 0 !important;
+            box-shadow: none !important;
+        }
+        .st-key-demo-runtime-health {
+            background: var(--md3-surface-container) !important;
+            border-radius: 20px !important;
+            padding: 0.72rem 0.86rem !important;
+        }
+        .st-key-demo-scenario-controls {
+            background: var(--md3-surface-container-low) !important;
+            border-radius: 24px !important;
+            padding: 0.82rem 0.95rem 0.9rem !important;
+        }
+        .st-key-demo-current-state {
+            background: var(--md3-surface-container-high) !important;
+            border-radius: 20px !important;
+            padding: 0.82rem 0.95rem !important;
+        }
+        .st-key-demo-runtime-health > div > [data-testid="stVerticalBlock"],
+        .st-key-demo-scenario-controls > div > [data-testid="stVerticalBlock"],
+        .st-key-demo-current-state > div > [data-testid="stVerticalBlock"] {
+            gap: 0.48rem !important;
+        }
+        .demo-health-grid {
+            display: grid;
+            gap: 0.5rem;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+        .demo-health-cell {
+            --health-accent: var(--md3-outline);
+            background: var(--md3-surface-container-high);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            min-height: 62px;
+            overflow: hidden;
+            padding: 0.66rem 0.76rem 0.62rem;
+            position: relative;
+        }
+        .demo-health-cell::before {
+            background: var(--health-accent);
+            border-radius: 0 0 6px 6px;
+            content: "";
+            height: 3px;
+            left: 0.78rem;
+            position: absolute;
+            right: 0.78rem;
+            top: 0;
+        }
+        .demo-health-cell span {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.68rem;
+            font-weight: 600;
+        }
+        .demo-health-cell strong {
+            color: var(--md3-on-surface);
+            font-size: 0.96rem;
+            font-weight: 720;
+            line-height: 1.2;
+            overflow-wrap: anywhere;
+        }
+        .demo-health-cell.health-success {
+            --health-accent: var(--md3-success);
+            background: color-mix(in srgb, var(--md3-success-container) 18%, var(--md3-surface-container-high));
+        }
+        .demo-health-cell.health-success strong { color: var(--md3-on-surface); }
+        .demo-health-cell.health-warning {
+            --health-accent: var(--md3-warning);
+            background: color-mix(in srgb, var(--md3-warning-container) 24%, var(--md3-surface-container-high));
+        }
+        .demo-health-cell.health-warning strong { color: var(--md3-on-warning-container); }
+        .demo-health-cell.health-error {
+            --health-accent: var(--md3-error);
+            background: color-mix(in srgb, var(--md3-error-container) 34%, var(--md3-surface-container-high));
+        }
+        .demo-health-cell.health-error strong { color: var(--md3-on-error-container); }
+        .demo-health-cell.health-model {
+            --health-accent: var(--md3-secondary);
+            background: color-mix(in srgb, var(--md3-secondary-container) 20%, var(--md3-surface-container-high));
+        }
+        .demo-health-cell.health-model strong {
+            color: var(--md3-on-surface);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.91rem;
+        }
+        .demo-health-cell.health-tertiary {
+            --health-accent: var(--md3-tertiary);
+            background: color-mix(in srgb, var(--md3-tertiary-container) 20%, var(--md3-surface-container-high));
+        }
+        .demo-health-cell.health-tertiary strong { color: var(--md3-on-surface); }
+        .demo-health-cell.health-primary {
+            --health-accent: var(--md3-primary);
+            background: color-mix(in srgb, var(--md3-primary-container) 20%, var(--md3-surface-container-high));
+        }
+        .demo-health-cell.health-primary strong { color: var(--md3-on-surface); }
+        .demo-health-meta,
+        .demo-diagnostics {
+            color: var(--md3-on-surface-variant);
+            display: flex;
+            flex-wrap: wrap;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.68rem;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+        }
+        .demo-health-meta span,
+        .demo-diagnostics span {
+            background: var(--md3-surface-container-highest);
+            border-radius: 10px;
+            padding: 0.28rem 0.5rem;
+        }
+        .demo-health-banner {
+            align-items: center;
+            border-radius: 18px;
+            display: flex;
+            flex-direction: row;
+            gap: 0.62rem;
+            margin-top: 0.32rem;
+            padding: 0.42rem 0.72rem;
+        }
+        .demo-health-banner strong {
+            flex: 0 0 auto;
+            font-size: 0.78rem;
+        }
+        .demo-health-banner span {
+            font-size: 0.74rem;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+        .demo-health-banner.warning {
+            background: var(--md3-warning-container);
+            color: var(--md3-on-warning-container);
+        }
+        .demo-health-banner.error {
+            background: var(--md3-error-container);
+            color: var(--md3-on-error-container);
+        }
+        .demo-control-section-title {
+            align-items: end;
+            display: flex;
+            gap: 1rem;
+            justify-content: space-between;
+            margin-bottom: 0.06rem;
+        }
+        .demo-control-section-title div {
+            display: flex;
+            flex-direction: column;
+            gap: 0.08rem;
+        }
+        .demo-control-section-title span {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.67rem;
+            font-weight: 600;
+        }
+        .demo-control-section-title strong {
+            color: var(--md3-on-surface);
+            font-size: 0.94rem;
+            font-weight: 680;
+        }
+        .demo-control-section-title small {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.7rem;
+        }
+        .st-key-demo-configuration {
+            background: var(--md3-surface-container) !important;
+            border-radius: 20px !important;
+            padding: 0.65rem 0.78rem 0.58rem !important;
+        }
+        .st-key-demo-configuration > div > [data-testid="stVerticalBlock"] {
+            gap: 0.38rem !important;
+        }
+        .st-key-demo-configuration div[data-testid="stToggle"] {
+            background: var(--md3-surface-container-high);
+            border-radius: 16px;
+            min-height: 62px;
+            padding: 0.52rem 0.7rem 0.34rem;
+        }
+        .demo-mode-description,
+        .demo-resident-source {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.72rem;
+            line-height: 1.45;
+            margin: 0.08rem 0;
+        }
+        .demo-resident-source {
+            margin-bottom: 0;
+        }
+        .demo-action-title {
+            margin-top: 0.18rem;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] > div[role="radiogroup"] {
+            background: transparent !important;
+            border: 1px solid var(--md3-outline) !important;
+            border-radius: 20px !important;
+            gap: 0 !important;
+            overflow: hidden !important;
+            width: fit-content !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"] {
+            background: transparent !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            border-right: 1px solid var(--md3-outline) !important;
+            box-shadow: none !important;
+            color: var(--md3-on-surface-variant) !important;
+            font-size: 0.8rem !important;
+            font-weight: 600 !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 16px !important;
+            transition: background-color var(--md3-motion), color var(--md3-motion) !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"]:last-child {
+            border-right: 0 !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"]:hover {
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, transparent) !important;
+            color: var(--md3-on-surface) !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"]:active {
+            background: color-mix(in srgb, var(--md3-on-surface) 12%, transparent) !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"]:focus-visible {
+            outline: 3px solid var(--md3-primary) !important;
+            outline-offset: -3px !important;
+            z-index: 1 !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"]:disabled {
+            opacity: 0.38 !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"][aria-checked="true"],
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"][data-selected="true"] {
+            background: var(--md3-primary-container) !important;
+            color: var(--md3-on-primary-container) !important;
+            font-weight: 700 !important;
+        }
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"][aria-checked="true"]::before,
+        .st-key-community-demo-control div[data-testid="stButtonGroup"] button[role="radio"][data-selected="true"]::before {
+            color: var(--md3-on-primary-container) !important;
+            content: "check" !important;
+            font-family: "Material Symbols Rounded" !important;
+            font-size: 0.95rem !important;
+            font-variation-settings: "FILL" 1, "wght" 600, "GRAD" 0, "opsz" 20 !important;
+            margin-right: 5px !important;
+        }
+        .st-key-community-demo-control div[data-testid="stSegmentedControl"] button[aria-selected="true"],
+        .st-key-community-demo-control div[data-testid="stSegmentedControl"] button[data-checked="true"] {
+            background: var(--md3-primary-container) !important;
+            color: var(--md3-on-primary-container) !important;
+        }
+        .st-key-community-demo-control div[data-testid="stSegmentedControl"] button[aria-selected="true"]::before,
+        .st-key-community-demo-control div[data-testid="stSegmentedControl"] button[data-checked="true"]::before {
+            color: var(--md3-on-primary-container) !important;
+        }
+        .st-key-community-demo-control div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+            background: var(--md3-surface-container-high) !important;
+            border-color: var(--md3-outline-variant) !important;
+            border-radius: 16px !important;
+            color: var(--md3-on-surface) !important;
+            min-height: 42px !important;
+        }
+        .st-key-community-demo-control div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover {
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, var(--md3-surface-container-high)) !important;
+        }
+        .st-key-community-demo-control div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within {
+            border-color: var(--md3-primary) !important;
+            box-shadow: 0 0 0 2px var(--md3-primary) !important;
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-"] button {
+            border-radius: 20px !important;
+            font-size: 0.88rem !important;
+            height: 48px !important;
+            letter-spacing: 0 !important;
+            min-height: 48px !important;
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-NORMAL"] button {
+            --action-container: color-mix(in srgb, var(--md3-success-container) 52%, var(--md3-surface-container-high));
+            --action-on-container: var(--md3-on-success-container);
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-FALL"] button {
+            --action-container: var(--md3-error-container);
+            --action-on-container: var(--md3-on-error-container);
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-WARNING"] button {
+            --action-container: color-mix(in srgb, var(--md3-warning-container) 78%, var(--md3-surface-container-high));
+            --action-on-container: var(--md3-on-warning-container);
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-BEND"] button {
+            --action-container: color-mix(in srgb, var(--md3-tertiary-container) 58%, var(--md3-surface-container-high));
+            --action-on-container: var(--md3-on-tertiary-container);
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-OFFLINE"] button {
+            --action-container: var(--md3-surface-container-highest);
+            --action-on-container: var(--md3-on-surface-variant);
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-RECOVER"] button {
+            --action-container: color-mix(in srgb, var(--md3-success-container) 46%, var(--md3-primary-container));
+            --action-on-container: var(--md3-on-primary-container);
+        }
+        .st-key-community-demo-control div[class*="st-key-demo-action-ACKNOWLEDGE"] button {
+            --action-container: var(--md3-primary-container);
+            --action-on-container: var(--md3-on-primary-container);
+        }
+        .st-key-community-demo-control div[data-testid="stAlert"] {
+            background: var(--md3-surface-container-high) !important;
+            border: 0 !important;
+            border-radius: 18px !important;
+            color: var(--md3-on-surface) !important;
+        }
+        .st-key-demo-current-state .resident-summary-grid {
+            grid-template-columns: repeat(9, minmax(0, 1fr));
+            gap: 0.48rem;
+            margin-bottom: 0.2rem;
+        }
+        .st-key-demo-current-state .resident-summary-item {
+            background: var(--md3-surface-container-highest);
+            border-radius: 16px;
+            min-height: 58px;
+            padding: 0.5rem 0.68rem;
+        }
+        .st-key-demo-current-state .resident-summary-item span {
+            font-size: 0.67rem;
+            font-weight: 600;
+            text-transform: none;
+        }
+        .st-key-demo-current-state .resident-summary-item strong {
+            font-size: 0.88rem;
+        }
+        .st-key-demo-current-state .resident-summary-radar {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 32%, var(--md3-surface-container-highest));
+        }
+        .st-key-demo-current-state .resident-summary-ai {
+            background: color-mix(in srgb, var(--md3-primary-container) 36%, var(--md3-surface-container-highest));
+        }
+        .st-key-demo-current-state .resident-summary-model {
+            background: color-mix(in srgb, var(--md3-secondary-container) 30%, var(--md3-surface-container-highest));
+        }
+        .st-key-demo-current-state .resident-summary-channel {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 24%, var(--md3-surface-container-highest));
+        }
+        .st-key-demo-current-state .resident-summary-posture {
+            background: color-mix(in srgb, var(--md3-tertiary-container) 30%, var(--md3-surface-container-highest));
+        }
+        .st-key-demo-current-state .demo-diagnostics {
+            margin-top: 0.42rem;
+        }
+
+        /* Technical Detail: dense engineering information in the approved MD3 system. */
+        .wall-header-technical h1 {
+            font-size: 1.65rem;
+            font-weight: 720;
+        }
+        .wall-header-technical .wall-live {
+            font-weight: 600;
+        }
+        .st-key-technical-page {
+            color: var(--md3-on-surface);
+        }
+        .st-key-technical-page > div > [data-testid="stVerticalBlock"] {
+            gap: 0.72rem !important;
+        }
+        .st-key-technical-page div[class*="st-key-technical-back-btn"] {
+            margin-bottom: 0 !important;
+        }
+        .st-key-technical-page div[class*="st-key-technical-back-btn"] button {
+            background: var(--md3-surface-container-high) !important;
+            color: var(--md3-on-surface) !important;
+        }
+        .st-key-technical-page div[class*="st-key-technical-back-btn"] button:hover {
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, var(--md3-surface-container-high)) !important;
+            color: var(--md3-on-surface) !important;
+        }
+        .st-key-technical-page div[class*="st-key-technical-back-btn"] button:active {
+            background: color-mix(in srgb, var(--md3-on-surface) 12%, var(--md3-surface-container-high)) !important;
+        }
+        .st-key-technical-page .technical-appbar-info {
+            gap: 0.12rem;
+            margin-bottom: 0;
+        }
+        .st-key-technical-page .technical-appbar-sub {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .st-key-technical-page .technical-appbar-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            gap: 0.5rem;
+        }
+        .st-key-technical-page .technical-appbar-age {
+            background: var(--md3-surface-container-high);
+            border-radius: 12px;
+            color: var(--md3-on-surface-variant);
+        }
+        .st-key-technical-page .technical-appbar-chip-wrapper {
+            margin: 0 5rem 0 0;
+        }
+        .st-key-technical-page .technical-appbar-chip {
+            background: var(--md3-surface-container);
+            border: 0;
+            border-radius: 14px;
+            color: var(--md3-on-surface-variant);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            padding: 0.34rem 0.72rem;
+        }
+        .st-key-technical-page .monitor-status-grid {
+            gap: 0.5rem;
+            margin: 0.5rem 0 0.6rem;
+        }
+        .st-key-technical-page .monitor-status-item {
+            --status-accent: var(--md3-outline);
+            background: var(--md3-surface-container);
+            border-radius: 16px;
+            min-height: 68px;
+            overflow: hidden;
+            padding: 0.78rem 0.82rem 0.64rem;
+            position: relative;
+        }
+        .st-key-technical-page .monitor-status-item::before {
+            background: var(--status-accent);
+            border-radius: 0 0 5px 5px;
+            content: "";
+            height: 3px;
+            left: 0.82rem;
+            position: absolute;
+            right: 0.82rem;
+            top: 0;
+        }
+        .st-key-technical-page .monitor-status-radar { --status-accent: var(--md3-tertiary); }
+        .st-key-technical-page .monitor-status-cloud { --status-accent: var(--md3-secondary); }
+        .st-key-technical-page .monitor-status-system { --status-accent: var(--md3-success); }
+        .st-key-technical-page .monitor-status-human { --status-accent: var(--md3-primary); }
+        .st-key-technical-page .monitor-status-ai { --status-accent: var(--md3-secondary); }
+        .st-key-technical-page .monitor-status-source { --status-accent: var(--md3-outline); }
+        .st-key-technical-page .monitor-status-item.connected {
+            background: var(--md3-surface-container);
+        }
+        .st-key-technical-page .monitor-status-item.warning {
+            background: color-mix(in srgb, var(--md3-warning-container) 22%, var(--md3-surface-container));
+        }
+        .st-key-technical-page .monitor-status-item.danger {
+            background: color-mix(in srgb, var(--md3-error-container) 34%, var(--md3-surface-container));
+        }
+        .st-key-technical-page .monitor-status-label {
+            font-size: 0.66rem;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .st-key-technical-page .monitor-status-value {
+            font-size: 0.9rem;
+            font-weight: 680;
+        }
+        .st-key-technical-page .status-live-dot {
+            animation: none;
+            background: var(--status-accent);
+            height: 7px;
+            width: 7px;
+        }
+        .st-key-technical-page .current-alert {
+            border-radius: 18px;
+            font-size: 0.8rem;
+            margin-bottom: 0.7rem;
+            min-height: 42px;
+            padding: 0.55rem 0.85rem;
+        }
+        .st-key-technical-page .current-alert.safe {
+            background: var(--md3-surface-container-low);
+        }
+        .st-key-technical-page .st-key-overview-panel,
+        .st-key-technical-page .st-key-coordinate-panel,
+        .st-key-technical-page .st-key-ai-panel,
+        .st-key-technical-page .st-key-axis-trend-panel,
+        .st-key-technical-page .st-key-log-dashboard {
+            border: 0 !important;
+            box-shadow: none !important;
+        }
+        .st-key-technical-page .st-key-overview-panel,
+        .st-key-technical-page .st-key-coordinate-panel,
+        .st-key-technical-page .st-key-ai-panel {
+            background: var(--md3-surface-container-low) !important;
+            border-radius: 22px !important;
+            min-height: 550px;
+            padding: 1rem !important;
+        }
+        .st-key-technical-page .st-key-axis-trend-panel {
+            background: var(--md3-surface-container-low) !important;
+            border-radius: 22px !important;
+            margin-top: 0.72rem;
+            padding: 1rem !important;
+        }
+        .st-key-technical-page .panel-heading {
+            border-bottom-color: var(--md3-outline-variant);
+            margin-bottom: 0.68rem;
+            padding-bottom: 0.55rem;
+        }
+        .st-key-technical-page .section-kicker {
+            color: var(--md3-on-surface-variant);
+            font-size: 0.66rem;
+            font-weight: 600;
+            letter-spacing: 0;
+            opacity: 0.76;
+            text-transform: none;
+        }
+        .st-key-technical-page .panel-heading h2 {
+            font-size: 1rem;
+            font-weight: 680;
+        }
+        .st-key-technical-page .panel-note {
+            font-size: 0.68rem;
+            line-height: 1.45;
+        }
+        .st-key-technical-page .state-hero {
+            padding: 0.18rem 0 0.5rem;
+        }
+        .st-key-technical-page .state-label {
+            font-size: 0.68rem;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .st-key-technical-page .state-hero-pill {
+            border-radius: 16px;
+            font-size: 1.08rem;
+            margin-top: 0.28rem;
+            padding: 0.58rem 0.75rem;
+        }
+        .st-key-technical-page .state-hero-pill.safe,
+        .st-key-technical-page .state-hero-pill.connected {
+            background: var(--md3-surface-container-high);
+            color: var(--md3-on-surface);
+        }
+        .st-key-technical-page .detail-list {
+            gap: 0;
+        }
+        .st-key-technical-page .detail-row,
+        .st-key-technical-page .detail-row:nth-child(even) {
+            background: transparent;
+            border-bottom: 1px solid var(--md3-outline-variant);
+            border-radius: 0;
+            min-height: 40px;
+            padding: 0.42rem 0.2rem;
+        }
+        .st-key-technical-page .detail-row:last-child {
+            border-bottom: 0;
+        }
+        .st-key-technical-page .detail-row span {
+            font-size: 0.76rem;
+        }
+        .st-key-technical-page .detail-row strong {
+            font-size: 0.8rem;
+        }
+        .st-key-technical-page .coordinate-stats-wrapper,
+        .st-key-technical-page .axis-trend-stats-wrapper {
+            background: var(--md3-surface-container);
+            border-radius: 16px;
+            margin-bottom: 0.68rem;
+            padding: 0.42rem 0.55rem;
+        }
+        .st-key-technical-page .coordinate-stat,
+        .st-key-technical-page .ai-meta-item,
+        .st-key-technical-page .axis-trend-stat {
+            background: transparent;
+            border-radius: 0;
+            border-right: 1px solid var(--md3-outline-variant);
+            padding: 0.4rem 0.55rem;
+        }
+        .st-key-technical-page .coordinate-stat:last-child,
+        .st-key-technical-page .ai-meta-item:last-child,
+        .st-key-technical-page .axis-trend-stat:last-child {
+            border-right: 0;
+        }
+        .st-key-technical-page .coordinate-stat span,
+        .st-key-technical-page .ai-meta-item span,
+        .st-key-technical-page .axis-trend-stat span {
+            font-size: 0.63rem;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .st-key-technical-page .coordinate-stat strong,
+        .st-key-technical-page .ai-meta-item strong,
+        .st-key-technical-page .axis-trend-stat strong {
+            font-size: 0.82rem;
+        }
+        .st-key-technical-page .axis-trend-stat.x strong { color: var(--md3-secondary); }
+        .st-key-technical-page .axis-trend-stat.y strong { color: var(--md3-tertiary); }
+        .st-key-technical-page .axis-trend-stat.z strong { color: var(--md3-on-secondary-container); }
+        .st-key-technical-page .projection-label {
+            font-size: 0.68rem;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .st-key-technical-page [data-testid="stVegaLiteChart"] {
+            background: var(--md3-surface-container-high) !important;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .st-key-technical-page .ai-entry {
+            background: transparent;
+            border-left: 1px solid var(--md3-outline-variant);
+            border-radius: 0;
+            margin: 0 0 0 0.35rem;
+            padding: 0.52rem 0.62rem 0.6rem 1rem;
+        }
+        .st-key-technical-page .ai-entry:has(.ai-entry-status.simulated) {
+            background: color-mix(in srgb, var(--md3-secondary-container) 14%, transparent);
+            border-radius: 0 14px 14px 0;
+        }
+        .st-key-technical-page .ai-entry:has(.ai-entry-status.warning) {
+            background: color-mix(in srgb, var(--md3-warning-container) 16%, transparent);
+        }
+        .st-key-technical-page .ai-entry:has(.ai-entry-status.danger) {
+            background: color-mix(in srgb, var(--md3-error-container) 22%, transparent);
+        }
+        .st-key-technical-page .ai-entry-status {
+            color: var(--md3-primary);
+            font-size: 0.72rem;
+        }
+        .st-key-technical-page .ai-entry-status.simulated {
+            color: var(--md3-secondary);
+        }
+        .st-key-technical-page .ai-entry-dot {
+            background: var(--md3-primary);
+            box-shadow: 0 0 0 4px var(--md3-surface-container-low);
+            margin-left: -1.36rem;
+            margin-right: 0.38rem;
+        }
+        .st-key-technical-page .ai-entry-status.simulated .ai-entry-dot {
+            background: var(--md3-secondary);
+        }
+        .st-key-technical-page .ai-entry p {
+            font-size: 0.78rem;
+            line-height: 1.42;
+            margin: 0.28rem 0;
+        }
+        .st-key-technical-page .ai-entry-meta,
+        .st-key-technical-page .ai-entry-time {
+            font-size: 0.66rem;
+        }
+        .st-key-technical-page .ai-entry-code {
+            background: var(--md3-surface-container-high);
+            border-radius: 8px;
+        }
+        .st-key-technical-page .subsection-heading {
+            border-bottom-color: var(--md3-outline-variant);
+            margin: 0.9rem 0 0.45rem;
+        }
+        .st-key-technical-page .subsection-heading h2 {
+            font-size: 0.98rem;
+            font-weight: 680;
+        }
+        .st-key-technical-page .sensor-lines {
+            background: var(--md3-surface-container-low);
+            border-radius: 20px;
+            color: var(--md3-on-surface-variant);
+            font-size: 0.7rem;
+            line-height: 1.55;
+            padding: 0.82rem 0.92rem;
+        }
+        .st-key-technical-page .sensor-line {
+            border-bottom-color: var(--md3-outline-variant);
+        }
+        .st-key-technical-page .sensor-line b {
+            color: var(--md3-on-surface-variant);
+        }
+        .st-key-technical-page .sensor-line .sensor-category-radar { color: var(--md3-tertiary); }
+        .st-key-technical-page .sensor-line .sensor-category-ai { color: var(--md3-secondary); }
+        .st-key-technical-page .sensor-line .sensor-category-system { color: var(--md3-on-surface); }
+        .st-key-technical-page .st-key-log-dashboard {
+            background: var(--md3-surface-container-low) !important;
+            border-radius: 24px !important;
+            margin-top: 0.85rem;
+            padding: 0.9rem 1rem 1rem !important;
+        }
+        .st-key-technical-page .st-key-log-dashboard .subsection-heading {
+            margin-top: 0;
+        }
+        .st-key-technical-page .st-key-log-dashboard [role="tablist"] {
+            background: var(--md3-surface-container);
+            border-radius: 16px;
+            gap: 0.2rem;
+            padding: 0.24rem;
+            width: fit-content;
+        }
+        .st-key-technical-page .st-key-log-dashboard [data-testid="stTab"] {
+            background: transparent;
+            border-radius: 12px;
+            color: var(--md3-on-surface-variant);
+            font-size: 0.76rem;
+            min-height: 36px;
+            padding: 0 0.85rem;
+        }
+        .st-key-technical-page .st-key-log-dashboard [data-testid="stTab"][aria-selected="true"] {
+            background: var(--md3-primary-container);
+            color: var(--md3-on-primary-container);
+        }
+        .st-key-technical-page .st-key-log-dashboard [data-testid="stTab"]:hover {
+            background: color-mix(in srgb, var(--md3-on-surface) 8%, transparent);
+        }
+        .st-key-technical-page .st-key-log-dashboard [data-testid="stTab"]:active {
+            background: color-mix(in srgb, var(--md3-on-surface) 12%, transparent);
+        }
+        .st-key-technical-page .st-key-log-dashboard [data-testid="stTab"]:focus-visible {
+            outline: 3px solid var(--md3-primary);
+            outline-offset: 2px;
+        }
+        .st-key-technical-page [data-testid="stDataFrame"] {
+            background: var(--md3-surface-container);
+            border: 0;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .st-key-technical-page [data-testid="stCode"] {
+            background: var(--md3-surface-container-high) !important;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .st-key-technical-page [data-testid="stCode"] pre,
+        .st-key-technical-page [data-testid="stCode"] code {
+            background: var(--md3-surface-container-high) !important;
+            color: var(--md3-on-surface-variant) !important;
+            font-size: 0.7rem;
+        }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
                 animation-duration: 0.001ms !important;
                 animation-iteration-count: 1 !important;
                 scroll-behavior: auto !important;
                 transition-duration: 0.001ms !important;
+            }
+        }
+        @media (max-width: 1500px) {
+            .st-key-demo-current-state .resident-summary-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
             }
         }
         @media (max-width: 1100px) {
@@ -1541,6 +2652,8 @@ def _install_styles() -> None:
             .st-key-overview-panel,
             .st-key-coordinate-panel,
             .st-key-ai-panel { min-height: auto; }
+            .demo-health-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .st-key-demo-current-state .resident-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 700px) {
             .wall-header { align-items: flex-start; gap: 0.8rem; }
@@ -1552,9 +2665,15 @@ def _install_styles() -> None:
             .axis-trend-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .coordinate-stat:nth-child(2), .ai-meta-item:nth-child(2) { border-right: 0; }
             .axis-trend-stat:nth-child(2) { border-right: 0; }
+            .demo-health-banner {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.18rem;
+            }
             .coordinate-stat, .ai-meta-item { border-bottom: 1px solid var(--line); }
             .axis-trend-stat { border-bottom: 1px solid var(--line); }
             .state-value { font-size: 1.45rem; }
+            .demo-health-grid { grid-template-columns: 1fr; }
         }
         </style>
         """
@@ -1632,19 +2751,19 @@ def _show_status_bar(snapshot: MonitorSnapshot, cloud_status: str) -> None:
         else ("PRESENT" if snapshot.human_present else "NONE")
     )
     items = [
-        ("Radar Link", snapshot.radar_status),
-        ("Point Cloud", cloud_status),
-        ("System State", snapshot.current_status),
-        ("Human", human_status),
-        ("Intelligent Result", "FALL" if snapshot.fall_detected else "NORMAL"),
-        ("Data Source", snapshot.source),
+        ("radar", "Radar Link", snapshot.radar_status),
+        ("cloud", "Point Cloud", cloud_status),
+        ("system", "System State", snapshot.current_status),
+        ("human", "Human", human_status),
+        ("ai", "Intelligent Result", "FALL" if snapshot.fall_detected else "NORMAL"),
+        ("source", "Data Source", snapshot.source),
     ]
     cards = []
-    for label, value in items:
+    for semantic, label, value in items:
         status_cls = _status_class(value)
         live_dot = '<span class="status-live-dot"></span>' if value in {"CONNECTED", "LIVE"} else ""
         cards.append(
-            f'<div class="monitor-status-item {status_cls}">'
+            f'<div class="monitor-status-item monitor-status-{semantic} {status_cls}">'
             f'<span class="monitor-status-label">{escape(label)}</span>'
             f'<strong class="monitor-status-value">{live_dot}{escape(value)}</strong>'
             '</div>'
@@ -1699,11 +2818,14 @@ def _show_overview(snapshot: MonitorSnapshot, latest: pd.Series) -> None:
     human_value = "数据过期" if snapshot.radar_status == "DISCONNECTED" else (
         "是" if snapshot.human_present else "否"
     )
+    posture_event = _text(latest.get("posture_event")) or "NONE"
+    posture_value = "BEND · SIMULATED" if posture_event == "BEND" else "NONE"
     rows = [
         ("人体存在", human_value),
         ("雷达跌倒信号", _result(latest.get("radar_is_fall"))),
         ("AI 最终判断", _result(latest.get("final_result"))),
         ("运动状态", snapshot.motion_state),
+        ("姿态事件", posture_value),
         ("Python 状态机", _text(latest.get("system_state")) or "未知"),
         ("报警输出", "电脑语音"),
         ("最新数据", _short_time(snapshot.last_update)),
@@ -1714,9 +2836,9 @@ def _show_overview(snapshot: MonitorSnapshot, latest: pd.Series) -> None:
         for label, value in rows
     )
     st.markdown(
-        '<div class="panel-heading"><div><div class="section-kicker">Detection</div>'
+        '<div class="panel-heading"><div><div class="section-kicker">状态监测</div>'
         '<h2>检测状态总览</h2></div><span class="panel-note">二次判断状态机</span></div>'
-        f'<div class="state-hero"><div class="state-label">CURRENT STATE</div>'
+        f'<div class="state-hero"><div class="state-label">当前状态</div>'
         f'<div class="state-hero-pill {state_class}">{escape(state_label)}</div></div>'
         f'<div class="detail-list">{details}</div>',
         unsafe_allow_html=True,
@@ -1725,7 +2847,7 @@ def _show_overview(snapshot: MonitorSnapshot, latest: pd.Series) -> None:
 
 def _show_coordinates(point_history: list[PointHistoryEntry], source: str) -> None:
     st.markdown(
-        '<div class="panel-heading"><div><div class="section-kicker">Spatial Tracking</div>'
+        '<div class="panel-heading"><div><div class="section-kicker">空间追踪</div>'
         '<h2>X / Y / Z 实时点云投影</h2></div>'
         f'<span class="panel-note">{escape(source)}<br>单位：m</span></div>',
         unsafe_allow_html=True,
@@ -1748,10 +2870,10 @@ def _show_coordinates(point_history: list[PointHistoryEntry], source: str) -> No
     center = latest_cloud[["x", "y", "z"]].mean()
     mean_speed = latest_cloud["speed"].abs().mean()
     stats = [
-        ("X CENTER", f'{center["x"]:+.2f} m'),
-        ("Y CENTER", f'{center["y"]:+.2f} m'),
-        ("Z CENTER", f'{center["z"]:+.2f} m'),
-        ("POINTS / SPEED", f"{len(latest_cloud)} / {mean_speed:.2f} m/s"),
+        ("X 中心", f'{center["x"]:+.2f} m'),
+        ("Y 中心", f'{center["y"]:+.2f} m'),
+        ("Z 中心", f'{center["z"]:+.2f} m'),
+        ("点数 / 速度", f"{len(latest_cloud)} / {mean_speed:.2f} m/s"),
     ]
     stats_html = "".join(
         f'<div class="coordinate-stat"><span>{escape(label)}</span>'
@@ -1760,14 +2882,14 @@ def _show_coordinates(point_history: list[PointHistoryEntry], source: str) -> No
     )
     st.markdown(f'<div class="coordinate-stats-wrapper"><div class="coordinate-stats">{stats_html}</div></div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="projection-label">Front projection · X / Z</div>', unsafe_allow_html=True)
+    st.markdown('<div class="projection-label">正面投影 · X / Z</div>', unsafe_allow_html=True)
     st.altair_chart(_projection_chart(history, "x", "z", 245), width="stretch")
     xy_col, yz_col = st.columns(2, gap="small")
     with xy_col:
-        st.markdown('<div class="projection-label">Top · X / Y</div>', unsafe_allow_html=True)
+        st.markdown('<div class="projection-label">顶视投影 · X / Y</div>', unsafe_allow_html=True)
         st.altair_chart(_projection_chart(history, "x", "y", 125), width="stretch")
     with yz_col:
-        st.markdown('<div class="projection-label">Side · Y / Z</div>', unsafe_allow_html=True)
+        st.markdown('<div class="projection-label">侧面投影 · Y / Z</div>', unsafe_allow_html=True)
         st.altair_chart(_projection_chart(history, "y", "z", 125), width="stretch")
 
 
@@ -1797,8 +2919,8 @@ def _projection_chart(
             ),
             color=alt.condition(
                 alt.datum.is_latest_cloud,
-                alt.value(palette.terra),
-                alt.value(palette.sage),
+                alt.value(palette.secondary),
+                alt.value(palette.tertiary),
             ),
             opacity=alt.condition(alt.datum.is_latest_cloud, alt.value(0.95), alt.value(0.12)),
             size=alt.condition(alt.datum.is_latest_cloud, alt.value(95), alt.value(28)),
@@ -1826,7 +2948,7 @@ def _projection_chart(
 
 def _show_axis_trends(samples: list[AxisHistoryEntry], source: str) -> None:
     st.markdown(
-        '<div class="panel-heading"><div><div class="section-kicker">Motion Timeline</div>'
+        '<div class="panel-heading"><div><div class="section-kicker">运动轨迹</div>'
         '<h2>实时 XYZ 坐标轴线图</h2></div>'
         f'<span class="panel-note">{escape(source)}<br>点云质心 · 最近 40 帧</span></div>',
         unsafe_allow_html=True,
@@ -1850,10 +2972,10 @@ def _show_axis_trends(samples: list[AxisHistoryEntry], source: str) -> None:
 
     latest = data.iloc[-1]
     stats = [
-        ("x", "X AXIS", f'{latest["x"]:+.2f} m'),
-        ("y", "Y AXIS", f'{latest["y"]:+.2f} m'),
-        ("z", "Z AXIS", f'{latest["z"]:+.2f} m'),
-        ("", "SAMPLES / POINTS", f'{len(data)} / {int(latest["point_count"])}'),
+        ("x", "X 轴", f'{latest["x"]:+.2f} m'),
+        ("y", "Y 轴", f'{latest["y"]:+.2f} m'),
+        ("z", "Z 轴", f'{latest["z"]:+.2f} m'),
+        ("", "样本 / 点数", f'{len(data)} / {int(latest["point_count"])}'),
     ]
     stats_html = "".join(
         f'<div class="axis-trend-stat {css_class}"><span>{escape(label)}</span>'
@@ -1897,7 +3019,11 @@ def _axis_trend_chart(
                 title=None,
                 scale=alt.Scale(
                     domain=["X", "Y", "Z"],
-                    range=[palette.terra, palette.sage, palette.axis_blue],
+                    range=[
+                        palette.secondary,
+                        palette.tertiary,
+                        palette.on_secondary_container,
+                    ],
                 ),
                 legend=alt.Legend(orient="top", direction="horizontal"),
             ),
@@ -1936,7 +3062,7 @@ def _show_ai_panel(
     decision_source = _business_ai_source(snapshot.ai_model)
     work_state = _business_ai_state(snapshot.ai_work_state)
     st.markdown(
-        '<div class="panel-heading"><div><div class="section-kicker">Local Intelligence</div>'
+        '<div class="panel-heading"><div><div class="section-kicker">本地智能</div>'
         '<h2>AI 判断流</h2></div>'
         f'<span class="panel-note">{escape(decision_source)}<br>{escape(work_state)}</span></div>',
         unsafe_allow_html=True,
@@ -1953,13 +3079,13 @@ def _show_ai_panel(
     )
     simulated = _text(latest.get("ai_status")) == "AI_SIMULATED"
     meta = [
-        ("RADAR", _result(latest.get("radar_is_fall"))),
+        ("雷达", _result(latest.get("radar_is_fall"))),
         ("AI", _result(latest.get("ai_result"))),
         (
-            "TRACE" if simulated else "LATENCY",
+            "链路" if simulated else "延迟",
             "SIMULATED" if simulated else _inference(latest),
         ),
-        ("LAST", _short_time(_text(latest_ai_event.get("timestamp")))),
+        ("最近", _short_time(_text(latest_ai_event.get("timestamp")))),
     ]
     meta_html = "".join(
         f'<div class="ai-meta-item"><span>{escape(label)}</span>'
@@ -1968,10 +3094,42 @@ def _show_ai_panel(
     )
     st.markdown(f'<div class="coordinate-stats-wrapper"><div class="ai-meta-grid">{meta_html}</div></div>', unsafe_allow_html=True)
     entries = build_ai_chat(events, max_items=100)
-    _show_ai_timeline(entries)
+    trace_key = _simulated_trace_key(entries)
+    previous_trace_key = st.session_state.get("last_simulated_trace_key")
+    animate_simulated = trace_key is not None and trace_key != previous_trace_key
+    if animate_simulated:
+        st.session_state["last_simulated_trace_key"] = trace_key
+    _show_ai_timeline(entries, animate_simulated=animate_simulated)
 
 
-def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
+def _simulated_trace_entries(entries: list[AIChatEntry]) -> list[AIChatEntry]:
+    """Return the newest complete DIRECT trace in presentation order."""
+
+    if not entries or not entries[-1].simulated:
+        return []
+    trace: list[AIChatEntry] = []
+    for entry in reversed(entries):
+        if not entry.simulated:
+            break
+        trace.append(entry)
+        if entry.status == "RADAR_INPUT":
+            break
+    trace.reverse()
+    return trace if trace and trace[0].status == "RADAR_INPUT" else []
+
+
+def _simulated_trace_key(entries: list[AIChatEntry]) -> str | None:
+    trace = _simulated_trace_entries(entries)
+    if not trace:
+        return None
+    return f"{trace[0].timestamp}:{trace[-1].timestamp}:{trace[-1].status}"
+
+
+def _show_ai_timeline(
+    entries: list[AIChatEntry],
+    *,
+    animate_simulated: bool = False,
+) -> None:
     if not entries:
         st.markdown(
             '<div class="coordinate-empty"><strong>等待 AI 判断</strong>'
@@ -1991,14 +3149,22 @@ def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
         "WARNING_CONFIRMED": "疑似异常",
         "NORMAL_CONFIRMED": "正常确认",
     }
-    for entry in reversed(entries[-7:]):
+    simulated_trace = _simulated_trace_entries(entries)
+    visible_entries = simulated_trace or list(reversed(entries[-7:]))
+    for step_index, entry in enumerate(visible_entries):
         css_class = ""
-        if entry.status in {"FALL_DETECTED", "ALARM_TRIGGERED"}:
+        if entry.status in {"FALL_DETECTED", "ALARM_TRIGGERED", "FALL_CONFIRMED"}:
             css_class = "danger"
-        elif entry.status == "ANALYZING":
+        elif entry.status in {
+            "ANALYZING",
+            "AI_ERROR",
+            "AI_FALLBACK",
+            "FALLBACK",
+            "WARNING_CONFIRMED",
+        }:
             css_class = "warning"
         elif entry.simulated:
-            css_class = "danger" if entry.status == "FALL_CONFIRMED" else "simulated"
+            css_class = "simulated"
         status = (
             simulated_labels.get(entry.status, entry.status)
             if entry.simulated
@@ -2030,8 +3196,13 @@ def _show_ai_timeline(entries: list[AIChatEntry]) -> None:
             if entry.simulated
             else _short_time(entry.timestamp)
         )
+        animation_classes = (
+            f" trace-sequenced trace-step-{min(step_index, 5)}"
+            if animate_simulated and entry.simulated
+            else ""
+        )
         blocks.append(
-            '<div class="ai-entry"><div class="ai-entry-head">'
+            f'<div class="ai-entry{animation_classes}"><div class="ai-entry-head">'
             f'<span class="ai-entry-status {css_class}">{dot_html}{escape(status)}</span>'
             f'<span class="ai-entry-time">{escape(timestamp)}</span></div>'
             f'<p>{escape(message)}</p>'
@@ -2048,9 +3219,15 @@ def _show_sensor_stream(entries: list[SensorStreamEntry]) -> None:
     lines = []
     for entry in reversed(entries[-18:]):
         raw = f" | raw={entry.raw}" if entry.raw else ""
+        category_class = {
+            "RADAR": "radar",
+            "AI": "ai",
+            "SYSTEM": "system",
+        }.get(entry.category.upper(), "neutral")
         lines.append(
             '<div class="sensor-line">'
-            f'{escape(_short_time(entry.timestamp))} <b>[{escape(entry.category)}]</b> '
+            f'{escape(_short_time(entry.timestamp))} '
+            f'<b class="sensor-category-{category_class}">[{escape(entry.category)}]</b> '
             f'{escape(entry.text + raw)}</div>'
         )
     st.markdown(f'<div class="sensor-lines">{"".join(lines)}</div>', unsafe_allow_html=True)
@@ -2185,6 +3362,7 @@ def _ensure_monitor_columns(data: pd.DataFrame) -> pd.DataFrame:
         "ai_trigger": "legacy",
         "point_count": 0,
         "radar_points": "[]",
+        "posture_event": "NONE",
     }
     for column, default in defaults.items():
         if column not in normalized.columns:

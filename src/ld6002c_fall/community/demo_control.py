@@ -13,7 +13,15 @@ from .models import DemoResponseMode, DemoScenario, ResidentState, local_now
 from .telemetry import CommunityTelemetryStore
 
 
-DemoAction = Literal["NORMAL", "FALL", "WARNING", "OFFLINE", "RECOVER", "ACKNOWLEDGE"]
+DemoAction = Literal[
+    "NORMAL",
+    "FALL",
+    "WARNING",
+    "BEND",
+    "OFFLINE",
+    "RECOVER",
+    "ACKNOWLEDGE",
+]
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,7 @@ class DemoControlService:
         *,
         timestamp: datetime | None = None,
         response_mode: DemoResponseMode | None = None,
+        voice_announcement_requested: bool = False,
     ) -> DemoControlResult:
         now = timestamp or local_now()
         if action == "ACKNOWLEDGE":
@@ -67,5 +76,6 @@ class DemoControlService:
             timestamp=now,
             demo_override=action != "RECOVER",
             response_mode=response_mode,
+            voice_announcement_requested=voice_announcement_requested,
         )
         return DemoControlResult(action, state, None, "DEMO_REQUEST")

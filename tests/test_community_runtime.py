@@ -19,6 +19,7 @@ from ld6002c_fall.community import (
     DemoResponseMode,
 )
 from ld6002c_fall.radar_model import RadarFrame
+from ld6002c_fall.voice_announcement import VoiceAnnouncementOutput
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,30 @@ class RecordingAlarm(AlarmOutput):
         self.emitted.append(frame)
 
     def close(self) -> None:
+            self.closed += 1
+
+
+class RecordingVoice(VoiceAnnouncementOutput):
+    def __init__(self, *, fail: bool = False) -> None:
+        self.messages: list[str] = []
+        self.closed = 0
+        self.fail = fail
+
+    @property
+    def ready(self) -> bool:
+        return True
+
+    @property
+    def backend(self) -> str:
+        return "recording"
+
+    def announce(self, text: str) -> bool:
+        self.messages.append(text)
+        if self.fail:
+            raise OSError("speech unavailable")
+        return True
+
+    def close(self) -> None:
         self.closed += 1
 
 
@@ -44,6 +69,7 @@ def _runtime(
     max_frames: int = 60,
     ai: OllamaFallAI | None = None,
     alarm: AlarmOutput | None = None,
+    voice: VoiceAnnouncementOutput | None = None,
     response_mode: DemoResponseMode = "DIRECT",
     interval_seconds: float = 0.5,
 ) -> tuple[CommunityController, CommunityTelemetryStore, CommunityDemoRuntime]:
@@ -62,6 +88,7 @@ def _runtime(
         CommunityRuntimeHealthStore(tmp_path / "community_runtime.json"),
         ai=ai,
         alarm=alarm,
+        voice_announcement=voice,
         interval_seconds=interval_seconds,
         demo_response_mode=response_mode,
     )
@@ -309,7 +336,10 @@ def test_running_direct_runtime_consumes_request_within_one_tick(tmp_path) -> No
         deadline = time.monotonic() + 1
         while time.monotonic() < deadline:
             state = controller.states()["B1-102"]
-            if state.applied_scenario_revision == state.scenario_revision:
+            if (
+                state.applied_scenario_revision == state.scenario_revision
+                and len(alarm.emitted) == 1
+            ):
                 break
             time.sleep(0.005)
         elapsed = time.perf_counter() - started
@@ -388,3 +418,134 @@ def test_running_runtime_consumes_fall_request_end_to_end(tmp_path) -> None:
 
     assert runtime.is_running is False
     assert runtime.health_store.read().runtime == "STOPPED"
+
+
+def test_bend_in_ai_mode_skips_ai_and_persists_safe_posture_telemetry(
+    tmp_path,
+) -> None:
+    ai_calls: list[str] = []
+
+    def transport(url: str, _payload: dict[str, Any] | None, _timeout: float):
+        ai_calls.append(url)
+        return {"models": [{"name": "qwen3:0.6b"}]}
+
+    alarm = RecordingAlarm()
+    voice = RecordingVoice()
+    controller, telemetry, runtime = _runtime(
+        tmp_path,
+        ai=OllamaFallAI(transport=transport),
+        alarm=alarm,
+        voice=voice,
+        response_mode="AI",
+    )
+    runtime.tick(BASE)
+    pending = DemoControlService(controller).execute(
+        "B1-101",
+        "BEND",
+        timestamp=BASE + timedelta(seconds=0.5),
+        response_mode="AI",
+    ).state
+    assert pending.desired_scenario == "BEND"
+
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    runtime.tick(BASE + timedelta(seconds=1.0))
+
+    state = controller.states()["B1-101"]
+    rows = _rows(telemetry.frame_path("B1-101"))
+    events = _rows(telemetry.event_path("B1-101"))
+    community_events = controller.recent_events(30)
+    bend_rows = [row for row in rows if "status=BEND" in row["raw"]]
+    latest_points = __import__("json").loads(bend_rows[-1]["radar_points"])
+    assert not any(url.endswith("/api/chat") for url in ai_calls)
+    assert state.status == "NORMAL"
+    assert state.posture_event == "BEND"
+    assert state.desired_scenario == "BEND"
+    assert state.radar_result == state.ai_result == 0
+    assert state.source == "DEMO_DIRECT"
+    assert state.ai_model == "not-requested"
+    assert state.ai_success is False
+    assert len(bend_rows) >= 2
+    assert bend_rows[-1]["motion_state"] == "bending"
+    assert bend_rows[-1]["fall_detected"] == "False"
+    assert bend_rows[-1]["radar_is_fall"] == "0"
+    assert bend_rows[-1]["final_result"] == "0"
+    assert bend_rows[-1]["device_state"] == "NORMAL"
+    assert bend_rows[-1]["posture_event"] == "BEND"
+    assert len(latest_points) > 0
+    assert 0.9 <= max(point["z"] for point in latest_points) <= 1.2
+    assert "BEND_SIMULATED" in {row["event"] for row in events}
+    assert "AI_RESPONSE" not in {row["event"] for row in events}
+    assert "FALL_ALERT" not in {row["event"] for row in community_events}
+    assert alarm.emitted == []
+    assert voice.messages == []
+
+
+def test_bend_and_recovery_clear_posture_without_repeating_voice(tmp_path) -> None:
+    voice = RecordingVoice()
+    controller, telemetry, runtime = _runtime(tmp_path, voice=voice)
+    runtime.tick(BASE)
+    control = DemoControlService(controller)
+    control.execute(
+        "B1-102",
+        "BEND",
+        timestamp=BASE + timedelta(seconds=0.5),
+        response_mode="DIRECT",
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    runtime.tick(BASE + timedelta(seconds=1.0))
+
+    assert voice.messages == ["检测到弯腰姿态，请注意安全。"]
+    assert controller.states()["B1-102"].posture_event == "BEND"
+
+    control.execute(
+        "B1-102",
+        "RECOVER",
+        timestamp=BASE + timedelta(seconds=1.5),
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=1.5))
+    state = controller.states()["B1-102"]
+    assert state.status == "NORMAL"
+    assert state.posture_event == "NONE"
+    assert state.desired_scenario == "NORMAL"
+    assert voice.messages[-1] == "当前监护状态已恢复正常。"
+    events = _rows(telemetry.event_path("B1-102"))
+    assert sum(row["event"] == "VOICE_ANNOUNCEMENT" for row in events) == 2
+
+
+def test_voice_failure_does_not_block_bend_and_fall_never_uses_voice(tmp_path) -> None:
+    voice = RecordingVoice(fail=True)
+    alarm = RecordingAlarm()
+    controller, telemetry, runtime = _runtime(
+        tmp_path,
+        alarm=alarm,
+        voice=voice,
+    )
+    runtime.tick(BASE)
+    control = DemoControlService(controller)
+    control.execute(
+        "B1-201",
+        "BEND",
+        response_mode="DIRECT",
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    assert controller.states()["B1-201"].posture_event == "BEND"
+    voice_events = [
+        row
+        for row in _rows(telemetry.event_path("B1-201"))
+        if row["event"] == "VOICE_ANNOUNCEMENT"
+    ]
+    assert voice_events and '"success": false' in voice_events[-1]["details"]
+
+    control.execute(
+        "B1-201",
+        "FALL",
+        response_mode="DIRECT",
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=1.0))
+    assert controller.states()["B1-201"].posture_event == "NONE"
+    assert len(voice.messages) == 1
+    assert len(alarm.emitted) == 1

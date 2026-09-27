@@ -18,8 +18,15 @@ from ..device_protocol import DeviceState
 from ..event_logger import EventName
 from ..mock_reader import MockRadarStatus, build_mock_radar_frame
 from ..radar_model import RadarFrame
+from ..voice_announcement import ConsoleVoiceAnnouncement, VoiceAnnouncementOutput
 from .controller import CommunityController
-from .models import DemoResponseMode, DemoScenario, ResidentState, local_now
+from .models import (
+    CommunityStatus,
+    DemoResponseMode,
+    DemoScenario,
+    ResidentState,
+    local_now,
+)
 from .telemetry import CommunityTelemetryStore
 
 
@@ -34,6 +41,7 @@ class CommunityRuntimeHealth:
     last_ai_error: str | None = None
     telemetry: str = "STARTING"
     alarm: str = "READY"
+    voice: str = "UNAVAILABLE"
     demo_response_mode: str = "DIRECT"
     last_runtime_error: str | None = None
 
@@ -125,6 +133,7 @@ class CommunityDemoRuntime:
         *,
         ai: OllamaFallAI | None = None,
         alarm: AlarmOutput | None = None,
+        voice_announcement: VoiceAnnouncementOutput | None = None,
         interval_seconds: float = 0.5,
         real_log_path: str | Path | None = None,
         real_stale_seconds: float = 5.0,
@@ -143,6 +152,7 @@ class CommunityDemoRuntime:
         self.health_store = health_store
         self.ai = ai
         self.alarm = alarm
+        self.voice_announcement = voice_announcement or ConsoleVoiceAnnouncement()
         self.interval_seconds = interval_seconds
         self.real_log_path = Path(real_log_path) if real_log_path else None
         self.real_stale_seconds = real_stale_seconds
@@ -159,6 +169,7 @@ class CommunityDemoRuntime:
             ai_mode="AI" if ai is not None else "DISABLED",
             ollama="CHECKING" if ai is not None else "DISABLED",
             alarm=_alarm_status(alarm),
+            voice=_voice_status(self.voice_announcement),
             demo_response_mode=demo_response_mode,
         )
         self._last_results: dict[str, FallAIResult] = {}
@@ -201,6 +212,7 @@ class CommunityDemoRuntime:
             health_thread.join(timeout)
         if self.alarm is not None:
             self.alarm.close()
+        self.voice_announcement.close()
         self._health = replace(
             self._health,
             runtime="STOPPED",
@@ -248,6 +260,7 @@ class CommunityDemoRuntime:
                     details="Real telemetry is stale; classroom simulation is active",
                     demo_override=False,
                     applied_scenario_revision=state.scenario_revision,
+                    applied_scenario=state.desired_scenario,
                 )
 
             if state.status == "FALL" and state.handled and resident.id in self._alarm_residents:
@@ -378,8 +391,25 @@ class CommunityDemoRuntime:
             demo_response_mode=response_mode,
         )
         radar_result = int(scenario in {"WARNING", "FALL"})
-        applied_status: DemoScenario
-        if response_mode == "DIRECT":
+        applied_status: CommunityStatus
+        if scenario == "BEND":
+            ai_result = 0
+            result = FallAIResult(
+                result=0,
+                label="NORMAL",
+                message=(
+                    "弯腰为课堂模拟姿态，未调用真实雷达或 AI 判断链路。"
+                ),
+                model="not-requested",
+                inference_ms=0.0,
+                success=False,
+            )
+            self._last_results[requested.resident_id] = result
+            applied_status = "NORMAL"
+            source = "DEMO_DIRECT"
+            ai_model = "not-requested"
+            ai_success = False
+        elif response_mode == "DIRECT":
             ai_result = int(scenario == "FALL")
             result = FallAIResult(
                 result=ai_result,
@@ -436,6 +466,18 @@ class CommunityDemoRuntime:
             ai_success = False
 
         previous_status = requested.status
+        transition_details = (
+            json.dumps(
+                {
+                    "posture_event": "BEND",
+                    "simulated": True,
+                    "sensor_capability": "DEMO_ONLY",
+                },
+                ensure_ascii=False,
+            )
+            if scenario == "BEND"
+            else result.message
+        )
         state, entering_fall = self.controller.inject_demo_transition(
             requested.resident_id,
             applied_status,
@@ -445,11 +487,33 @@ class CommunityDemoRuntime:
             ai_model=ai_model,
             ai_success=ai_success,
             source=source,
-            details=result.message,
+            details=transition_details,
             demo_override=requested.demo_override,
             applied_scenario_revision=requested.scenario_revision,
+            applied_scenario=scenario,
+            posture_event="BEND" if scenario == "BEND" else "NONE",
         )
-        event_source = "DEMO_DIRECT" if response_mode == "DIRECT" else None
+        event_source = source if scenario == "BEND" else (
+            "DEMO_DIRECT" if response_mode == "DIRECT" else None
+        )
+        if scenario == "BEND":
+            frame = self._transition_frame(requested.resident_id, "BEND", timestamp)
+            self._log_event(
+                requested.resident_id,
+                "BEND_SIMULATED",
+                timestamp,
+                "NORMAL",
+                json.dumps(
+                    {
+                        "posture_event": "BEND",
+                        "simulated": True,
+                        "sensor_capability": "DEMO_ONLY",
+                    },
+                    ensure_ascii=False,
+                ),
+                frame.raw,
+                source="DEMO_DIRECT",
+            )
         if entering_fall:
             frame = self._transition_frame(requested.resident_id, "FALL", timestamp)
             self._log_event(
@@ -479,7 +543,14 @@ class CommunityDemoRuntime:
                 timestamp,
                 source=event_source,
             )
-        if response_mode == "DIRECT" and scenario != "OFFLINE":
+        if requested.voice_announcement_requested and scenario != "FALL":
+            self._announce_scenario(
+                requested.resident_id,
+                scenario,
+                timestamp,
+                source=source,
+            )
+        if response_mode == "DIRECT" and scenario not in {"OFFLINE", "BEND"}:
             self._log_simulated_ai_trace(
                 requested.resident_id,
                 timestamp,
@@ -488,6 +559,47 @@ class CommunityDemoRuntime:
                 ai_result,
             )
         return state
+
+    def _announce_scenario(
+        self,
+        resident_id: str,
+        scenario: DemoScenario,
+        timestamp: datetime,
+        *,
+        source: str,
+    ) -> None:
+        text = {
+            "BEND": "检测到弯腰姿态，请注意安全。",
+            "WARNING": "检测到疑似异常姿态，请注意观察。",
+            "OFFLINE": "监护设备已离线，请检查设备连接。",
+            "NORMAL": "当前监护状态已恢复正常。",
+        }.get(scenario)
+        if text is None:
+            return
+        try:
+            success = self.voice_announcement.announce(text)
+        except Exception as exc:
+            success = False
+            print(f"[Voice] 状态语音播报失败：{exc}")
+        details = json.dumps(
+            {
+                "text": text,
+                "scenario": scenario,
+                "enabled": True,
+                "success": success,
+                "backend": self.voice_announcement.backend,
+                "source": source,
+            },
+            ensure_ascii=False,
+        )
+        self._log_event(
+            resident_id,
+            "VOICE_ANNOUNCEMENT",
+            timestamp,
+            "DISCONNECTED" if scenario == "OFFLINE" else "NORMAL",
+            details,
+            source=source,
+        )
 
     def _transition_frame(
         self,
@@ -643,6 +755,8 @@ class CommunityDemoRuntime:
 
 
 def _scenario_for(state: ResidentState) -> DemoScenario:
+    if state.posture_event == "BEND" and state.desired_scenario == "BEND":
+        return "BEND"
     return state.status if state.status in {"NORMAL", "WARNING", "FALL", "OFFLINE"} else "NORMAL"
 
 
@@ -651,3 +765,9 @@ def _alarm_status(alarm: AlarmOutput | None) -> str:
         return "DISABLED"
     ready = getattr(alarm, "ready", True)
     return "READY" if ready else "CONSOLE_ONLY"
+
+
+def _voice_status(voice: VoiceAnnouncementOutput) -> str:
+    if voice.ready:
+        return "READY"
+    return "CONSOLE" if voice.backend == "console" else "UNAVAILABLE"
