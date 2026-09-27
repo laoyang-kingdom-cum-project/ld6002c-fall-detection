@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import time
 from types import SimpleNamespace
 
 import ld6002c_fall.voice_announcement as voice_module
@@ -54,7 +53,7 @@ def test_windows_voice_uses_non_blocking_encoded_powershell_command() -> None:
     assert kwargs["stdout"] is not None
 
 
-def test_windows_voice_delay_is_inside_non_blocking_powershell_process() -> None:
+def test_windows_voice_command_has_no_fixed_fall_delay() -> None:
     calls: list[list[str]] = []
 
     def process_factory(command: list[str], **_kwargs: object):
@@ -67,16 +66,11 @@ def test_windows_voice_delay_is_inside_non_blocking_powershell_process() -> None
         verify=False,
     )
 
-    started = time.perf_counter()
-    assert output.announce("检测到跌倒，请立即处理。", delay_ms=800) is True
-    elapsed = time.perf_counter() - started
+    assert output.announce("检测到跌倒，请立即处理。") is True
 
-    assert elapsed < 0.1
     script = base64.b64decode(calls[0][-1]).decode("utf-16le")
-    assert "Start-Sleep -Milliseconds 800;" in script
-    assert script.index("Start-Sleep -Milliseconds 800;") < script.index(
-        "$speaker.Speak($text)"
-    )
+    assert "Start-Sleep" not in script
+    assert "$speaker.Speak($text)" in script
 
 
 def test_windows_voice_process_failure_falls_back_to_console(capsys) -> None:
@@ -89,7 +83,7 @@ def test_windows_voice_process_failure_falls_back_to_console(capsys) -> None:
         verify=False,
     )
 
-    assert output.announce("检测到跌倒，请立即处理。", delay_ms=800) is False
+    assert output.announce("检测到跌倒，请立即处理。") is False
     captured = capsys.readouterr().out
     assert "Windows 语音启动失败" in captured
     assert "[Voice] 检测到跌倒，请立即处理。" in captured

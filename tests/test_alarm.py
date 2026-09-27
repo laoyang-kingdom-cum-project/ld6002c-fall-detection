@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+import subprocess
+import threading
+import time
 from typing import Any
 
 import pytest
@@ -12,23 +15,26 @@ from ld6002c_fall.radar_model import RadarFrame
 
 class FakeProcess:
     def __init__(self) -> None:
-        self.running = True
         self.terminated = False
+        self.finished = threading.Event()
 
     def poll(self) -> int | None:
-        return None if self.running else 0
+        return 0 if self.finished.is_set() else None
 
     def terminate(self) -> None:
         self.terminated = True
-        self.running = False
+        self.finished.set()
 
-    def wait(self, timeout: float) -> int:
-        del timeout
-        self.running = False
+    def wait(self, timeout: float | None = None) -> int:
+        if not self.finished.wait(timeout):
+            raise subprocess.TimeoutExpired("ffplay", timeout)
         return 0
 
     def kill(self) -> None:
-        self.running = False
+        self.finished.set()
+
+    def finish(self) -> None:
+        self.finished.set()
 
 
 def radar_frame() -> RadarFrame:
@@ -83,6 +89,31 @@ def test_desktop_alarm_keeps_console_fallback_when_sound_is_missing(
     output = capsys.readouterr().out
     assert "跌倒报警" in output
     assert "音频文件不存在" in output
+
+
+def test_desktop_alarm_runs_callback_after_playback_without_blocking(
+    tmp_path: Path,
+) -> None:
+    sound = tmp_path / "alarm.mp3"
+    sound.write_bytes(b"test audio")
+    process = FakeProcess()
+    callback_finished = threading.Event()
+    alarm = DesktopAudioAlarm(
+        sound,
+        player="/usr/bin/ffplay",
+        process_factory=lambda *_args, **_kwargs: process,  # type: ignore[arg-type]
+    )
+    alarm.emit(radar_frame(), "确认跌倒")
+
+    started = time.perf_counter()
+    registered = alarm.run_after_playback(callback_finished.set)
+    elapsed = time.perf_counter() - started
+
+    assert registered is True
+    assert elapsed < 0.1
+    assert callback_finished.is_set() is False
+    process.finish()
+    assert callback_finished.wait(1.0) is True
 
 
 @pytest.mark.parametrize("volume", [-1, 101])

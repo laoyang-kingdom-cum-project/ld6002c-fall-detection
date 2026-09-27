@@ -200,15 +200,27 @@ def test_project_wheel_matches_current_windows_runtime_contract() -> None:
         )
         metadata = archive.read(metadata_name).decode("utf-8")
         names = set(archive.namelist())
+        packaged_sources = {
+            name: archive.read(name)
+            for name in (
+                "ld6002c_fall/alarm.py",
+                "ld6002c_fall/community/runtime.py",
+                "ld6002c_fall/voice_announcement.py",
+            )
+        }
 
     assert "Requires-Python: >=3.11" in metadata
     assert "Requires-Dist: streamlit<2,>=1.59" in metadata
+    assert "ld6002c_fall/alarm.py" in names
     assert "ld6002c_fall/community/controller.py" in names
     assert "ld6002c_fall/community/state_store.py" in names
     assert "ld6002c_fall/community/telemetry.py" in names
     assert "ld6002c_fall/community/runtime.py" in names
     assert "ld6002c_fall/community_demo.py" in names
     assert "ld6002c_fall/voice_announcement.py" in names
+    for archive_name, packaged_source in packaged_sources.items():
+        source_path = ROOT / "src" / archive_name
+        assert packaged_source == source_path.read_bytes()
 
 
 def test_service_runner_uses_the_existing_cli_and_mock_fallback() -> None:

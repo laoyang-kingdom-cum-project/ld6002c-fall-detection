@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import csv
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Literal
 from urllib.error import URLError
 
 import dashboard.app as dashboard_app
+import pytest
 from ld6002c_fall.ai import OllamaFallAI
-from ld6002c_fall.alarm import AlarmOutput
+from ld6002c_fall.alarm import AlarmOutput, ConsoleAlarm
 from ld6002c_fall.community import (
     CommunityController,
     CommunityDemoRuntime,
@@ -28,24 +30,68 @@ BASE = datetime(2026, 9, 21, 8, 0, tzinfo=timezone(timedelta(hours=8)))
 
 
 class RecordingAlarm(AlarmOutput):
-    def __init__(self) -> None:
+    def __init__(self, events: list[str] | None = None) -> None:
         self.emitted: list[RadarFrame] = []
         self.closed = 0
+        self.events = events
 
     def emit(self, frame: RadarFrame, state: str) -> None:
         assert state == "确认跌倒"
         self.emitted.append(frame)
+        if self.events is not None:
+            self.events.append("alarm.emit")
 
     def close(self) -> None:
-            self.closed += 1
+        self.closed += 1
+        if self.events is not None:
+            self.events.append("alarm.close")
+
+
+class RecordingPlaybackAlarm(RecordingAlarm):
+    def __init__(self, events: list[str] | None = None) -> None:
+        super().__init__(events)
+        self._callbacks: list[Callable[[], None]] = []
+        self.playing = False
+
+    def emit(self, frame: RadarFrame, state: str) -> None:
+        super().emit(frame, state)
+        self.playing = True
+
+    def run_after_playback(self, callback: Callable[[], None]) -> bool:
+        if not self.playing:
+            return False
+        self._callbacks.append(callback)
+        if self.events is not None:
+            self.events.append("alarm.callback.registered")
+        return True
+
+    @property
+    def registered_callbacks(self) -> int:
+        return len(self._callbacks)
+
+    def finish_playback(self) -> None:
+        self.playing = False
+        if self.events is not None:
+            self.events.append("alarm.playback.finished")
+        callback = self._callbacks.pop(0)
+        callback()
+
+    def close(self) -> None:
+        self.playing = False
+        super().close()
 
 
 class RecordingVoice(VoiceAnnouncementOutput):
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail: bool = False,
+        events: list[str] | None = None,
+    ) -> None:
         self.messages: list[str] = []
-        self.delays: list[int] = []
         self.closed = 0
         self.fail = fail
+        self.events = events
 
     @property
     def ready(self) -> bool:
@@ -55,9 +101,10 @@ class RecordingVoice(VoiceAnnouncementOutput):
     def backend(self) -> str:
         return "recording"
 
-    def announce(self, text: str, *, delay_ms: int = 0) -> bool:
+    def announce(self, text: str) -> bool:
         self.messages.append(text)
-        self.delays.append(delay_ms)
+        if self.events is not None:
+            self.events.append("voice.announce")
         if self.fail:
             raise OSError("speech unavailable")
         return True
@@ -598,12 +645,11 @@ def test_bend_and_recovery_clear_posture_without_repeating_voice(tmp_path) -> No
     assert voice.messages[-1] == "当前监护状态已恢复正常。"
     events = _rows(telemetry.event_path("B1-102"))
     assert sum(row["event"] == "VOICE_ANNOUNCEMENT" for row in events) == 2
-    assert voice.delays == [0, 0]
 
 
-def test_fall_voice_enabled_announces_once_after_alarm_edge(tmp_path) -> None:
+def test_console_alarm_announces_fall_voice_immediately_once(tmp_path) -> None:
     voice = RecordingVoice()
-    alarm = RecordingAlarm()
+    alarm = ConsoleAlarm()
     controller, telemetry, runtime = _runtime(
         tmp_path,
         alarm=alarm,
@@ -630,9 +676,7 @@ def test_fall_voice_enabled_announces_once_after_alarm_edge(tmp_path) -> None:
     )
     runtime.tick(BASE + timedelta(seconds=2.0))
 
-    assert len(alarm.emitted) == 1
     assert voice.messages == ["检测到跌倒，请立即处理。"]
-    assert voice.delays == [800]
     voice_events = [
         row
         for row in _rows(telemetry.event_path("B1-201"))
@@ -644,7 +688,94 @@ def test_fall_voice_enabled_announces_once_after_alarm_edge(tmp_path) -> None:
     assert details["text"] == "检测到跌倒，请立即处理。"
     assert details["backend"] == "recording"
     assert details["success"] is True
-    assert details["delay_ms"] == 800
+    assert details["trigger"] == "alarm_playback_unavailable"
+
+
+def test_fall_voice_disabled_does_not_register_playback_callback(tmp_path) -> None:
+    alarm = RecordingPlaybackAlarm()
+    voice = RecordingVoice()
+    controller, _telemetry, runtime = _runtime(
+        tmp_path,
+        alarm=alarm,
+        voice=voice,
+    )
+    runtime.tick(BASE)
+    DemoControlService(controller).execute(
+        "B1-201",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=0.5),
+        voice_announcement_requested=False,
+    )
+
+    runtime.tick(BASE + timedelta(seconds=0.5))
+
+    assert len(alarm.emitted) == 1
+    assert alarm.registered_callbacks == 0
+    assert voice.messages == []
+
+
+def test_fall_voice_waits_for_playback_without_blocking_runtime(tmp_path) -> None:
+    order: list[str] = []
+    alarm = RecordingPlaybackAlarm(order)
+    voice = RecordingVoice(events=order)
+    controller, telemetry, runtime = _runtime(
+        tmp_path,
+        alarm=alarm,
+        voice=voice,
+    )
+    runtime.tick(BASE)
+    control = DemoControlService(controller)
+    control.execute(
+        "B1-201",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=0.5),
+        response_mode="DIRECT",
+        voice_announcement_requested=True,
+    )
+
+    started = time.perf_counter()
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    elapsed = time.perf_counter() - started
+    runtime.tick(BASE + timedelta(seconds=1.0))
+    runtime.tick(BASE + timedelta(seconds=1.5))
+    control.execute(
+        "B1-201",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=2.0),
+        response_mode="DIRECT",
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=2.0))
+
+    assert elapsed < 0.75
+    assert len(alarm.emitted) == 1
+    assert alarm.registered_callbacks == 1
+    assert voice.messages == []
+    assert order == ["alarm.emit", "alarm.callback.registered"]
+    assert not any(
+        row["event"] == "VOICE_ANNOUNCEMENT"
+        for row in _rows(telemetry.event_path("B1-201"))
+    )
+
+    alarm.finish_playback()
+
+    assert voice.messages == ["检测到跌倒，请立即处理。"]
+    assert order == [
+        "alarm.emit",
+        "alarm.callback.registered",
+        "alarm.playback.finished",
+        "voice.announce",
+    ]
+    voice_events = [
+        row
+        for row in _rows(telemetry.event_path("B1-201"))
+        if row["event"] == "VOICE_ANNOUNCEMENT"
+    ]
+    assert len(voice_events) == 1
+    details = json.loads(voice_events[0]["details"])
+    assert details["trigger"] == "alarm_playback_finished"
+    assert details["scenario"] == "FALL"
+    assert details["success"] is True
 
 
 def test_fall_voice_failure_does_not_block_emergency_alarm(tmp_path) -> None:
@@ -669,7 +800,6 @@ def test_fall_voice_failure_does_not_block_emergency_alarm(tmp_path) -> None:
     assert controller.states()["B1-201"].status == "FALL"
     assert len(alarm.emitted) == 1
     assert voice.messages == ["检测到跌倒，请立即处理。"]
-    assert voice.delays == [800]
     voice_events = [
         row
         for row in _rows(telemetry.event_path("B1-201"))
@@ -677,6 +807,78 @@ def test_fall_voice_failure_does_not_block_emergency_alarm(tmp_path) -> None:
     ]
     assert len(voice_events) == 1
     assert json.loads(voice_events[0]["details"])["success"] is False
+
+
+@pytest.mark.parametrize("action", ["RECOVER", "ACKNOWLEDGE"])
+def test_clearing_fall_before_playback_ends_cancels_pending_voice(
+    tmp_path,
+    action: Literal["RECOVER", "ACKNOWLEDGE"],
+) -> None:
+    alarm = RecordingPlaybackAlarm()
+    voice = RecordingVoice()
+    controller, _telemetry, runtime = _runtime(
+        tmp_path,
+        alarm=alarm,
+        voice=voice,
+    )
+    runtime.tick(BASE)
+    control = DemoControlService(controller)
+    control.execute(
+        "B1-201",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=0.5),
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    assert voice.messages == []
+
+    control.execute(
+        "B1-201",
+        action,
+        timestamp=BASE + timedelta(seconds=0.75),
+    )
+    runtime.tick(BASE + timedelta(seconds=1.0))
+    alarm.finish_playback()
+
+    assert alarm.closed == 1
+    assert voice.messages == []
+
+
+def test_recovered_resident_can_schedule_voice_for_a_new_fall(tmp_path) -> None:
+    alarm = RecordingPlaybackAlarm()
+    voice = RecordingVoice()
+    controller, _telemetry, runtime = _runtime(
+        tmp_path,
+        alarm=alarm,
+        voice=voice,
+    )
+    runtime.tick(BASE)
+    control = DemoControlService(controller)
+
+    control.execute(
+        "B1-201",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=0.5),
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    alarm.finish_playback()
+    control.execute("B1-201", "RECOVER", timestamp=BASE + timedelta(seconds=1.0))
+    runtime.tick(BASE + timedelta(seconds=1.0))
+    control.execute(
+        "B1-201",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=1.5),
+        voice_announcement_requested=True,
+    )
+    runtime.tick(BASE + timedelta(seconds=1.5))
+    alarm.finish_playback()
+
+    assert len(alarm.emitted) == 2
+    assert voice.messages == [
+        "检测到跌倒，请立即处理。",
+        "检测到跌倒，请立即处理。",
+    ]
 
 
 def test_non_fall_voice_texts_remain_immediate(tmp_path) -> None:
@@ -702,4 +904,3 @@ def test_non_fall_voice_texts_remain_immediate(tmp_path) -> None:
         runtime.tick(timestamp)
 
     assert voice.messages == [text for _resident, _scenario, text in scenarios]
-    assert voice.delays == [0, 0, 0, 0]

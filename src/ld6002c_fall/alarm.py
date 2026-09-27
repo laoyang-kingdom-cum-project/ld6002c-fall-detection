@@ -6,7 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 import shutil
 import subprocess
-from typing import Protocol
+import threading
+from typing import Protocol, runtime_checkable
 
 from .radar_model import RadarFrame
 
@@ -17,6 +18,14 @@ class AlarmOutput(Protocol):
     def emit(self, frame: RadarFrame, state: str) -> None: ...
 
     def close(self) -> None: ...
+
+
+@runtime_checkable
+class PlaybackCompletionAlarm(Protocol):
+    """Optional alarm capability for work that follows real audio playback."""
+
+    def run_after_playback(self, callback: Callable[[], None]) -> bool:
+        """Run callback after active playback ends; return whether it was registered."""
 
 
 class ConsoleAlarm:
@@ -52,6 +61,7 @@ class DesktopAudioAlarm(ConsoleAlarm):
         self.player = player if player is not None else shutil.which("ffplay")
         self._process_factory = process_factory
         self._process: subprocess.Popen[bytes] | None = None
+        self._process_lock = threading.Lock()
 
     @property
     def ready(self) -> bool:
@@ -67,10 +77,6 @@ class DesktopAudioAlarm(ConsoleAlarm):
         if self.player is None:
             print("[Alarm] 未找到 ffplay，仅保留控制台报警")
             return
-        if self._process is not None and self._process.poll() is None:
-            print("[Alarm] 电脑语音报警正在播放")
-            return
-
         command = [
             self.player,
             "-nodisp",
@@ -82,24 +88,63 @@ class DesktopAudioAlarm(ConsoleAlarm):
             str(self.volume),
             str(self.sound_path),
         ]
-        try:
-            self._process = self._process_factory(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except OSError as exc:
-            print(f"[Alarm] 电脑语音播放失败：{exc}")
-            return
+        with self._process_lock:
+            if self._process is not None and self._process.poll() is None:
+                print("[Alarm] 电脑语音报警正在播放")
+                return
+            try:
+                self._process = self._process_factory(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError as exc:
+                print(f"[Alarm] 电脑语音播放失败：{exc}")
+                return
         print(
             f"[Alarm] 电脑正在播放 {self.sound_path.name} "
             f"(音量 {self.volume}%)"
         )
 
+    def run_after_playback(self, callback: Callable[[], None]) -> bool:
+        """Wait for the active ffplay process on a daemon thread."""
+
+        with self._process_lock:
+            process = self._process
+            if process is None or process.poll() is not None:
+                return False
+            thread = threading.Thread(
+                target=self._wait_then_run,
+                args=(process, callback),
+                name="desktop-audio-alarm-completion",
+                daemon=True,
+            )
+            thread.start()
+        return True
+
+    def _wait_then_run(
+        self,
+        process: subprocess.Popen[bytes],
+        callback: Callable[[], None],
+    ) -> None:
+        try:
+            process.wait()
+        except Exception as exc:
+            print(f"[Alarm] 等待电脑语音报警结束失败：{exc}")
+        finally:
+            with self._process_lock:
+                if self._process is process:
+                    self._process = None
+        try:
+            callback()
+        except Exception as exc:
+            print(f"[Alarm] 播放完成回调失败：{exc}")
+
     def close(self) -> None:
-        process = self._process
-        self._process = None
+        with self._process_lock:
+            process = self._process
+            self._process = None
         if process is None or process.poll() is not None:
             return
         process.terminate()

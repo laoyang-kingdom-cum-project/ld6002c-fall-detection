@@ -317,7 +317,7 @@ python -m streamlit run dashboard/app.py --server.port 8501
 
 “模拟弯腰”是 **DEMO ONLY / SIMULATED POSTURE EVENT**。当前 LD6002C 协议路径没有提供项目可直接使用的弯腰判定字段，因此 `BEND` 仅由 Community Demo Runtime 生成教学点云和姿态事件，不会标记为 LD6002C 原生能力或 Qwen 真实判断。它保持 `status=NORMAL`、`posture_event=BEND`、`radar_result=0`、`ai_result=0`，即使控制台选择“AI完整链路”也不调用 Ollama，不计入当前报警或今日报警。
 
-跌倒紧急报警与状态语音是两条独立输出链。`FALL` 始终保留原有 `AlarmOutput` / `DesktopAudioAlarm` / `ffplay` 紧急报警音；控制台的“状态语音播报”默认关闭，关闭时 FALL 行为不变。开启后，进入 FALL 的状态边沿会额外非阻塞调度“检测到跌倒，请立即处理。”，PowerShell 子进程延迟约 800 ms 后播报；BEND、WARNING、OFFLINE、NORMAL/RECOVER 仍立即播报。维持 FALL 的遥测 tick 或重复请求同一 FALL 状态不会重复报警或重复语音。Windows 使用本机 PowerShell `System.Speech`，不增加 Python 依赖；后端不可用时仅输出 `[Voice] ...` 控制台文本，不会阻断 ffplay 报警、状态迁移或遥测。“确认报警”和“恢复正常”仍会关闭当前跌倒报警音；后者还会清除真实住户的演示覆盖。
+跌倒紧急报警与状态语音是两条独立输出链。`FALL` 始终保留原有 `AlarmOutput` / `DesktopAudioAlarm` / `ffplay` 紧急报警音；控制台的“状态语音播报”默认关闭，关闭时 FALL 行为不变。开启后，进入 FALL 的状态边沿会立即播放紧急报警音，并由 daemon 等待线程在实际 ffplay 进程结束后播报“检测到跌倒，请立即处理。”，不阻塞 Runtime tick。如果没有真实音频进程，则立即调度语音。BEND、WARNING、OFFLINE、NORMAL/RECOVER 仍立即播报。维持 FALL 的遥测 tick 或重复请求同一 FALL 状态不会重复报警或重复语音；如果报警播放期间已恢复或确认，待播跌倒语音会被取消。Windows 使用本机 PowerShell `System.Speech`，不增加 Python 依赖；后端不可用时仅输出 `[Voice] ...` 控制台文本，不会阻断 ffplay 报警、状态迁移或遥测。“确认报警”和“恢复正常”仍会关闭当前跌倒报警音；后者还会清除真实住户的演示覆盖。
 
 首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`；`data/community_runtime.json` 保存 heartbeat、Ollama、模型、AI 模式、遥测和报警 health。状态和遥测使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半份数据。社区事件写入 `data/community_events.csv`；分住户技术帧与 AI/报警事件写入 `data/community_telemetry/<resident>.csv` 和 `<resident>.events.csv`。可通过 `COMMUNITY_TELEMETRY_INTERVAL`、`COMMUNITY_TELEMETRY_MAX_FRAMES` 和 `REAL_TELEMETRY_STALE_SECONDS` 调整默认的 0.5 秒、60 帧和 5 秒阈值。
 

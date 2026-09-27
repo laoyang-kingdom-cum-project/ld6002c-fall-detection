@@ -13,7 +13,7 @@ import time
 
 from ..ai import FallAIRequest, FallAIResult, OllamaFallAI
 from ..ai.ollama_client import disabled_ai_result
-from ..alarm import AlarmOutput
+from ..alarm import AlarmOutput, PlaybackCompletionAlarm
 from ..device_protocol import DeviceState
 from ..event_logger import EventName
 from ..mock_reader import MockRadarStatus, build_mock_radar_frame
@@ -175,6 +175,9 @@ class CommunityDemoRuntime:
         self._last_results: dict[str, FallAIResult] = {}
         self._active_scenarios: dict[str, DemoScenario] = {}
         self._alarm_residents: set[str] = set()
+        self._fall_voice_tokens: dict[str, object] = {}
+        self._fall_voice_lock = threading.Lock()
+        self._event_lock = threading.Lock()
 
     @property
     def is_running(self) -> bool:
@@ -204,6 +207,7 @@ class CommunityDemoRuntime:
 
     def stop(self, *, timeout: float = 5.0) -> None:
         self._stop_event.set()
+        self._cancel_pending_fall_voice()
         thread = self._thread
         if thread is not None and thread.is_alive():
             thread.join(timeout)
@@ -543,16 +547,19 @@ class CommunityDemoRuntime:
                 timestamp,
                 source=event_source,
             )
-        if requested.voice_announcement_requested and (
-            scenario != "FALL" or entering_fall
-        ):
-            self._announce_scenario(
-                requested.resident_id,
-                scenario,
-                timestamp,
-                source=source,
-                delay_ms=800 if scenario == "FALL" else 0,
-            )
+        if requested.voice_announcement_requested:
+            if scenario == "FALL" and entering_fall:
+                self._schedule_fall_voice(
+                    requested.resident_id,
+                    source=source,
+                )
+            elif scenario != "FALL":
+                self._announce_scenario(
+                    requested.resident_id,
+                    scenario,
+                    timestamp,
+                    source=source,
+                )
         if response_mode == "DIRECT" and scenario not in {"OFFLINE", "BEND"}:
             self._log_simulated_ai_trace(
                 requested.resident_id,
@@ -570,7 +577,7 @@ class CommunityDemoRuntime:
         timestamp: datetime,
         *,
         source: str,
-        delay_ms: int = 0,
+        trigger: str = "scenario_transition",
     ) -> None:
         text = {
             "BEND": "检测到弯腰姿态，请注意安全。",
@@ -582,7 +589,7 @@ class CommunityDemoRuntime:
         if text is None:
             return
         try:
-            success = self.voice_announcement.announce(text, delay_ms=delay_ms)
+            success = self.voice_announcement.announce(text)
         except Exception as exc:
             success = False
             print(f"[Voice] 状态语音播报失败：{exc}")
@@ -594,7 +601,7 @@ class CommunityDemoRuntime:
                 "success": success,
                 "backend": self.voice_announcement.backend,
                 "source": source,
-                "delay_ms": delay_ms,
+                "trigger": trigger,
             },
             ensure_ascii=False,
         )
@@ -612,6 +619,76 @@ class CommunityDemoRuntime:
             details,
             source=source,
         )
+
+    def _schedule_fall_voice(self, resident_id: str, *, source: str) -> None:
+        token = object()
+        with self._fall_voice_lock:
+            self._fall_voice_tokens[resident_id] = token
+
+        registered = False
+        if isinstance(self.alarm, PlaybackCompletionAlarm):
+            try:
+                registered = self.alarm.run_after_playback(
+                    lambda: self._announce_pending_fall_voice(
+                        resident_id,
+                        token,
+                        source=source,
+                        trigger="alarm_playback_finished",
+                    )
+                )
+            except Exception as exc:
+                print(f"[Voice] 等待跌倒报警音结束失败：{exc}")
+        if not registered:
+            self._announce_pending_fall_voice(
+                resident_id,
+                token,
+                source=source,
+                trigger="alarm_playback_unavailable",
+            )
+
+    def _announce_pending_fall_voice(
+        self,
+        resident_id: str,
+        token: object,
+        *,
+        source: str,
+        trigger: str,
+    ) -> None:
+        if self._stop_event.is_set():
+            self._cancel_pending_fall_voice(resident_id, token)
+            return
+        state = self.controller.states().get(resident_id)
+        should_announce = (
+            state is not None
+            and state.status == "FALL"
+            and not state.handled
+            and state.desired_scenario == "FALL"
+        )
+        with self._fall_voice_lock:
+            if self._fall_voice_tokens.get(resident_id) is not token:
+                return
+            self._fall_voice_tokens.pop(resident_id, None)
+        if not should_announce:
+            return
+        self._announce_scenario(
+            resident_id,
+            "FALL",
+            local_now(),
+            source=source,
+            trigger=trigger,
+        )
+
+    def _cancel_pending_fall_voice(
+        self,
+        resident_id: str | None = None,
+        token: object | None = None,
+    ) -> None:
+        with self._fall_voice_lock:
+            if resident_id is None:
+                self._fall_voice_tokens.clear()
+                return
+            if token is None or self._fall_voice_tokens.get(resident_id) is token:
+                self._fall_voice_tokens.pop(resident_id, None)
 
     def _transition_frame(
         self,
@@ -633,6 +710,7 @@ class CommunityDemoRuntime:
         *,
         source: str | None = None,
     ) -> None:
+        self._cancel_pending_fall_voice(resident_id)
         self._alarm_residents.discard(resident_id)
         if self.alarm is not None and not self._alarm_residents:
             self.alarm.close()
@@ -740,15 +818,16 @@ class CommunityDemoRuntime:
         *,
         source: str | None = None,
     ) -> None:
-        self.telemetry.log_event(
-            resident_id,
-            event,
-            timestamp=timestamp,
-            state=state,
-            details=details,
-            raw=raw,
-            source=source,
-        )
+        with self._event_lock:
+            self.telemetry.log_event(
+                resident_id,
+                event,
+                timestamp=timestamp,
+                state=state,
+                details=details,
+                raw=raw,
+                source=source,
+            )
 
     def _real_data_is_fresh(self, now: datetime) -> bool:
         if self.real_log_path is None or not self.real_log_path.is_file():
