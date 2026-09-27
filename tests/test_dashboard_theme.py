@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import inspect
 from pathlib import Path
 import re
 import tomllib
 
 import pandas as pd
 
+import dashboard.community_ui as community_ui
 from dashboard.app import (
     COMMUNITY_REFRESH_SECONDS,
     DARK_PALETTE,
@@ -226,6 +228,52 @@ def test_dashboard_keeps_bend_out_of_fall_alarm_counts() -> None:
     assert 'event.get("event") == "FALL_ALERT"' in community_source
     assert 'st_val in {"FALL", "WARNING"} or state.posture_event == "BEND"' in community_source
     assert 'and state.posture_event == "NONE"' in community_source
+
+
+def test_community_dashboard_uses_business_language_for_bend_and_source() -> None:
+    dashboard_source = "\n".join(
+        inspect.getsource(item)
+        for item in (
+            community_ui.render_community_dashboard,
+            community_ui._render_resident_matrix,
+            community_ui._render_operation_buttons,
+            community_ui._render_selected_resident,
+            community_ui._render_resident_status_capsule,
+            community_ui._render_resident_summary,
+        )
+    )
+
+    for diagnostic_text in (
+        "课堂模拟",
+        "弯腰姿态 · 演示",
+        "BEND · 模拟",
+        "DEMO_DIRECT",
+        "DEMO_ONLY",
+        "SIMULATED RADAR DATA · CLASSROOM DEMO",
+    ):
+        assert diagnostic_text not in dashboard_source
+    assert "检测到弯腰姿态，当前安全状态正常。" in dashboard_source
+    assert 'badge_text = "● 检测到弯腰姿态"' in dashboard_source
+    assert 'posture = "弯腰"' in dashboard_source
+    assert community_ui.EVENT_LABELS["BEND_SIMULATED"] == "弯腰姿态"
+    assert community_ui._business_channel("DEMO_DIRECT") == "社区安全监护"
+    assert community_ui._business_channel("LD6002C:serial") == (
+        "LD6002C 毫米波雷达"
+    )
+
+
+def test_demo_and_technical_views_keep_simulation_diagnostics() -> None:
+    community_source = Path("dashboard/community_ui.py").read_text(encoding="utf-8")
+    app_source = Path("dashboard/app.py").read_text(encoding="utf-8")
+
+    assert "判定来源 · {escape(state.source)}" in community_source
+    assert "DEMO ONLY" in community_source
+    assert "SIMULATED AI TRACE" in community_source
+    assert "SIMULATED RADAR DATA · CLASSROOM DEMO" in app_source
+    assert community_ui._voice_health_label("READY") == "Windows 中文语音可用"
+    assert community_ui._voice_health_label("CONSOLE") == (
+        "未检测到可用中文语音，仅控制台输出"
+    )
 
 
 def test_projection_chart_uses_dark_chart_colors() -> None:

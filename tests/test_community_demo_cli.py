@@ -14,9 +14,12 @@ from ld6002c_fall.community import (
 from ld6002c_fall.community_demo import (
     _build_environment,
     _port_available,
+    _report_voice_diagnostics,
+    _voice_backend_label,
     build_parser,
     main,
 )
+from ld6002c_fall.voice_announcement import ConsoleVoiceAnnouncement
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,6 +116,30 @@ def test_pyproject_exposes_community_demo_console_command() -> None:
     assert data["project"]["scripts"]["ld6002c-community-demo"] == (
         "ld6002c_fall.community_demo:main"
     )
+
+
+def test_voice_backend_labels_are_clear_for_demo_operators() -> None:
+    assert _voice_backend_label("READY") == "Windows 中文语音可用"
+    assert _voice_backend_label("CONSOLE") == (
+        "未检测到可用中文语音，仅控制台输出"
+    )
+
+
+def test_console_voice_startup_prints_complete_probe_diagnostics(capsys) -> None:
+    voice = ConsoleVoiceAnnouncement(
+        diagnostic_message="System.Speech 已加载，但未检测到 zh-* 中文语音。",
+        powershell_found=True,
+        system_speech_loaded=True,
+        chinese_voice_found=False,
+    )
+
+    _report_voice_diagnostics(voice, "CONSOLE")
+
+    output = capsys.readouterr().out
+    assert "powershell 是否找到: 是" in output
+    assert "System.Speech 是否加载: 是" in output
+    assert "zh-* voice 是否检测到: 否" in output
+    assert "回退原因: System.Speech 已加载，但未检测到 zh-* 中文语音。" in output
 
 
 def test_launcher_starts_runtime_before_streamlit_and_stops_it(

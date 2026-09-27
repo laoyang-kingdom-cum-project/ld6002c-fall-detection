@@ -480,6 +480,76 @@ def test_bend_in_ai_mode_skips_ai_and_persists_safe_posture_telemetry(
     assert voice.messages == []
 
 
+def test_bend_to_direct_fall_clears_posture_and_counts_one_fall(tmp_path) -> None:
+    alarm = RecordingAlarm()
+    controller, telemetry, runtime = _runtime(tmp_path, alarm=alarm)
+    control = DemoControlService(controller)
+    runtime.tick(BASE)
+
+    control.execute(
+        "B1-101",
+        "BEND",
+        timestamp=BASE + timedelta(seconds=0.5),
+        response_mode="DIRECT",
+    )
+    runtime.tick(BASE + timedelta(seconds=0.5))
+    assert controller.states()["B1-101"].posture_event == "BEND"
+
+    control.execute(
+        "B1-101",
+        "FALL",
+        timestamp=BASE + timedelta(seconds=1.0),
+        response_mode="DIRECT",
+    )
+    runtime.tick(BASE + timedelta(seconds=1.0))
+
+    states = controller.states()
+    state = states["B1-101"]
+    assert state.status == "FALL"
+    assert state.posture_event == "NONE"
+    assert state.desired_scenario == "FALL"
+    assert state.radar_result == 1
+    assert state.ai_result == 1
+    assert sum(item.status == "FALL" for item in states.values()) == 1
+    assert _rows(telemetry.frame_path("B1-101"))[-1]["posture_event"] == "NONE"
+    assert len(alarm.emitted) == 1
+
+
+def test_leaving_bend_for_warning_normal_or_offline_clears_posture(tmp_path) -> None:
+    controller, _telemetry, runtime = _runtime(tmp_path)
+    control = DemoControlService(controller)
+    runtime.tick(BASE)
+    timestamp = BASE
+
+    for scenario, expected_status in (
+        ("WARNING", "WARNING"),
+        ("NORMAL", "NORMAL"),
+        ("OFFLINE", "OFFLINE"),
+    ):
+        timestamp += timedelta(seconds=0.5)
+        control.execute(
+            "B1-102",
+            "BEND",
+            timestamp=timestamp,
+            response_mode="DIRECT",
+        )
+        runtime.tick(timestamp)
+        assert controller.states()["B1-102"].posture_event == "BEND"
+
+        timestamp += timedelta(seconds=0.5)
+        control.execute(
+            "B1-102",
+            scenario,
+            timestamp=timestamp,
+            response_mode="DIRECT",
+        )
+        runtime.tick(timestamp)
+        state = controller.states()["B1-102"]
+        assert state.status == expected_status
+        assert state.posture_event == "NONE"
+        assert state.desired_scenario == scenario
+
+
 def test_bend_and_recovery_clear_posture_without_repeating_voice(tmp_path) -> None:
     voice = RecordingVoice()
     controller, telemetry, runtime = _runtime(tmp_path, voice=voice)

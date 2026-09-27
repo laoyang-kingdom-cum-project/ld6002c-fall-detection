@@ -39,7 +39,7 @@ from .config import (
     DEFAULT_OLLAMA_TIMEOUT,
     DEFAULT_REAL_TELEMETRY_STALE_SECONDS,
 )
-from .voice_announcement import build_voice_announcement
+from .voice_announcement import VoiceAnnouncementOutput, build_voice_announcement
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -177,6 +177,7 @@ def main() -> None:
                 health_store,
                 wait_for_ai=args.enable_ai,
             )
+            _report_voice_diagnostics(voice_announcement, runtime_health.voice)
             env = _build_environment(args)
             command = [
                 sys.executable,
@@ -366,7 +367,7 @@ def _print_ready_urls(
     print(f"Ollama            : {ollama_status}")
     print(f"Model             : {model}")
     print(f"Demo Response     : {demo_response_mode}")
-    print(f"Voice Backend     : {voice_status}")
+    print(f"Voice Backend     : {_voice_backend_label(voice_status)}")
     print(f"Community         : {community_name}")
     print(f"Residents         : {resident_count}")
     print(f"Dashboard         : {local_url}/")
@@ -378,6 +379,43 @@ def _print_ready_urls(
             print(f"Mobile      : http://{lan_ip}:{port}/?view=control")
     print("\nREADY FOR DEMO")
     print("Press Ctrl+C to stop.\n")
+
+
+def _voice_backend_label(status: str) -> str:
+    return {
+        "READY": "Windows 中文语音可用",
+        "CONSOLE": "未检测到可用中文语音，仅控制台输出",
+        "UNAVAILABLE": "语音后端不可用，仅控制台输出",
+    }.get(status, status)
+
+
+def _report_voice_diagnostics(
+    voice: VoiceAnnouncementOutput,
+    status: str,
+) -> None:
+    if status != "CONSOLE":
+        return
+    powershell_found = getattr(voice, "powershell_found", False)
+    system_speech_loaded = getattr(voice, "system_speech_loaded", None)
+    chinese_voice_found = getattr(voice, "chinese_voice_found", None)
+    diagnostic_message = getattr(
+        voice,
+        "diagnostic_message",
+        "未提供语音后端诊断信息。",
+    )
+    print("\n[Voice] Windows 中文语音诊断")
+    print(f"[Voice] powershell 是否找到: {_diagnostic_flag(powershell_found)}")
+    print(f"[Voice] System.Speech 是否加载: {_diagnostic_flag(system_speech_loaded)}")
+    print(f"[Voice] zh-* voice 是否检测到: {_diagnostic_flag(chinese_voice_found)}")
+    print(f"[Voice] 回退原因: {diagnostic_message}")
+
+
+def _diagnostic_flag(value: bool | None) -> str:
+    if value is True:
+        return "是"
+    if value is False:
+        return "否"
+    return "未知"
 
 
 def _local_ip() -> str | None:

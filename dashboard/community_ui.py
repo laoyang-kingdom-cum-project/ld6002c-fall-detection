@@ -41,7 +41,7 @@ EVENT_LABELS = {
     "DEVICE_OFFLINE": "设备离线",
     "DEVICE_ONLINE": "设备上线",
     "DEMO_INJECTED": "演示数据注入",
-    "BEND_SIMULATED": "弯腰姿态（演示）",
+    "BEND_SIMULATED": "弯腰姿态",
 }
 
 
@@ -67,7 +67,7 @@ def render_community_dashboard(
         st.markdown(
             '<div class="current-alert posture">'
             f'<span class="status-badge posture">● 姿态关注 ({bend_count})</span>&nbsp;&nbsp;'
-            '<span>当前为课堂模拟弯腰姿态，安全状态仍为正常，未触发跌倒报警。</span></div>',
+            '<span>检测到弯腰姿态，当前安全状态正常。</span></div>',
             unsafe_allow_html=True,
         )
     else:
@@ -319,7 +319,7 @@ def _render_resident_matrix(
                     key=f"resident-card-{visual_state}{selected_class}-{resident.id}"
                 ):
                     status_label = (
-                        "弯腰姿态 · 演示"
+                        "弯腰姿态"
                         if state.posture_event == "BEND"
                         else STATUS_LABELS[state.status]
                     )
@@ -328,7 +328,7 @@ def _render_resident_matrix(
                     if selected:
                         indicator = "✓ 已选择"
                     elif state.posture_event == "BEND":
-                        indicator = "● 弯腰姿态"
+                        indicator = "● 姿态关注"
                     elif state.status in {"NORMAL", "RECOVERED"}:
                         indicator = "● 安全监护"
                     elif state.status == "FALL":
@@ -401,7 +401,7 @@ def _render_operation_buttons(
                 elif current_status == "WARNING":
                     advice = "疑似姿态异常：建议通过室内可视对讲核实老人状态，关注防滑拖鞋与夜起照明。"
                 elif state is not None and state.posture_event == "BEND":
-                    advice = "弯腰姿态为课堂模拟事件：可用于演示日常姿态提醒，不代表跌倒或医疗判断。"
+                    advice = "检测到弯腰姿态：建议提醒老人缓慢起身，并持续关注活动状态。"
                 else:
                     advice = "日常健康监护：该住户活动指标正常，建议维持每日晨间起居步态监测与室内通道无障碍防跌倒巡查。"
                 st.toast(
@@ -427,7 +427,7 @@ def _render_selected_resident(
     st.markdown(
         '<div class="panel-heading"><div><div class="section-kicker">'
         f'{escape(kicker)}</div><h2 class="resident-detail-title">{escape(resident.address)}</h2></div>'
-        f'<span class="panel-note resident-detail-note">{escape(resident.id)}<br>{escape(state.source)}</span></div>',
+        f'<span class="panel-note resident-detail-note">{escape(resident.id)}<br>{escape(_business_channel(state.source))}</span></div>',
         unsafe_allow_html=True,
     )
 
@@ -439,8 +439,6 @@ def _render_selected_resident(
 
     # 3. Plotly area height trend chart
     _render_resident_height_chart(state, theme)
-    if not resident.has_live_sensor or state.demo_override:
-        st.caption("数据来源：SIMULATED RADAR DATA · CLASSROOM DEMO")
 
     # Action buttons for current resident state
     action_columns = st.columns(2, gap="small")
@@ -499,7 +497,7 @@ def _render_resident_status_capsule(state: ResidentState) -> None:
         badge_text = "✕ 雷达传感器离线"
     elif state.posture_event == "BEND":
         badge_class = "posture"
-        badge_text = "● 检测到弯腰姿态 · 课堂模拟"
+        badge_text = "● 检测到弯腰姿态"
     else:
         badge_class = "safe"
         badge_text = "● 正常监护中 · 生命体征平稳"
@@ -522,7 +520,7 @@ def _render_resident_summary(resident: Resident, state: ResidentState) -> None:
         else "alarm-warning" if state.status == "WARNING" else "neutral"
     )
     process_semantic = "process-success" if state.handled else "neutral"
-    posture = "BEND · 模拟" if state.posture_event == "BEND" else "NONE"
+    posture = "弯腰" if state.posture_event == "BEND" else "无"
     rows = [
         ("老人姓名", resident.name, "identity"),
         ("年龄", f"{resident.age} 岁", "identity"),
@@ -535,7 +533,7 @@ def _render_resident_summary(resident: Resident, state: ResidentState) -> None:
             "已确认" if state.handled else "待处理",
             process_semantic,
         ),
-        ("数据信道", state.source, "channel"),
+        ("数据信道", _business_channel(state.source), "channel"),
         ("姿态事件", posture, "posture"),
     ]
 
@@ -811,7 +809,11 @@ def _render_runtime_health() -> None:
         ("Model", health.model, "health-model"),
         ("Telemetry", health.telemetry, _telemetry_health_tone(health.telemetry)),
         ("Alarm", health.alarm, _alarm_health_tone(health.alarm)),
-        ("Voice Backend", health.voice, _voice_health_tone(health.voice)),
+        (
+            "Voice Backend",
+            _voice_health_label(health.voice),
+            _voice_health_tone(health.voice),
+        ),
     )
     cells = "".join(
         '<div class="demo-health-cell '
@@ -843,8 +845,10 @@ def _render_runtime_health() -> None:
             f'<span>{escape(health.last_runtime_error)}</span></div>',
             unsafe_allow_html=True,
         )
-    if health.voice in {"CONSOLE", "UNAVAILABLE"}:
-        st.caption("语音播报不可用，将保留控制台文本输出。")
+    if health.voice == "CONSOLE":
+        st.caption("未检测到可用中文语音，仅控制台输出。")
+    elif health.voice == "UNAVAILABLE":
+        st.caption("语音播报后端不可用，仅保留控制台文本输出。")
 
 
 def _runtime_health_tone(value: str) -> str:
@@ -875,6 +879,14 @@ def _voice_health_tone(value: str) -> str:
     return "health-tertiary" if value == "READY" else "health-neutral"
 
 
+def _voice_health_label(value: str) -> str:
+    return {
+        "READY": "Windows 中文语音可用",
+        "CONSOLE": "未检测到可用中文语音，仅控制台输出",
+        "UNAVAILABLE": "语音后端不可用，仅控制台输出",
+    }.get(value, value)
+
+
 def _result_label(value: int | None) -> str:
     if value is None:
         return "--"
@@ -887,6 +899,15 @@ def _business_model(value: str | None) -> str:
     if value in {None, "", "fallback", "disabled", "not-requested"}:
         return "本地安全规则"
     return value
+
+
+def _business_channel(source: str) -> str:
+    normalized = source.strip().upper()
+    if normalized.startswith("LD6002C"):
+        return "LD6002C 毫米波雷达"
+    if normalized == "INITIAL":
+        return "等待监护数据"
+    return "社区安全监护"
 
 
 def _short_time(value: datetime | None) -> str:

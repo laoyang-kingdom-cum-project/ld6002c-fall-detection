@@ -19,6 +19,7 @@ def test_console_voice_labels_fallback_without_claiming_audio(capsys) -> None:
     assert success is False
     assert output.ready is False
     assert output.backend == "console"
+    assert output.diagnostic_message
     assert "[Voice] 检测到弯腰姿态" in capsys.readouterr().out
 
 
@@ -65,10 +66,42 @@ def test_windows_voice_probe_requires_system_speech_and_chinese_voice() -> None:
     )
 
     assert output.ready is False
+    assert output.powershell_found is True
+    assert output.system_speech_loaded is True
+    assert output.chinese_voice_found is False
+    assert output.diagnostic_message == (
+        "System.Speech 已加载，但未检测到 zh-* 中文语音。"
+    )
     assert len(calls) == 1
     script = base64.b64decode(calls[0][-1]).decode("utf-16le")
     assert "System.Speech" in script
     assert "Culture.Name -like 'zh-*'" in script
+
+
+def test_windows_voice_probe_reports_system_speech_load_failure() -> None:
+    output = WindowsSpeechAnnouncement(
+        powershell="powershell.exe",
+        runner=lambda *_args, **_kwargs: SimpleNamespace(returncode=3),
+    )
+
+    assert output.ready is False
+    assert output.powershell_found is True
+    assert output.system_speech_loaded is False
+    assert output.chinese_voice_found is False
+    assert output.diagnostic_message == "无法加载 Windows System.Speech。"
+
+
+def test_windows_voice_probe_reports_ready_chinese_voice() -> None:
+    output = WindowsSpeechAnnouncement(
+        powershell="powershell.exe",
+        runner=lambda *_args, **_kwargs: SimpleNamespace(returncode=0),
+    )
+
+    assert output.ready is True
+    assert output.powershell_found is True
+    assert output.system_speech_loaded is True
+    assert output.chinese_voice_found is True
+    assert "zh-* 中文语音" in output.diagnostic_message
 
 
 def test_voice_factory_falls_back_when_windows_probe_fails(monkeypatch) -> None:
@@ -87,3 +120,7 @@ def test_voice_factory_falls_back_when_windows_probe_fails(monkeypatch) -> None:
     output = build_voice_announcement()
 
     assert isinstance(output, ConsoleVoiceAnnouncement)
+    assert output.powershell_found is True
+    assert output.system_speech_loaded is True
+    assert output.chinese_voice_found is False
+    assert "未检测到 zh-* 中文语音" in output.diagnostic_message
