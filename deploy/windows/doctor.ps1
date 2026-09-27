@@ -11,6 +11,7 @@ $ollamaBaseUrl = if ([string]::IsNullOrWhiteSpace($env:OLLAMA_BASE_URL)) { "http
 $ollamaModel = if ([string]::IsNullOrWhiteSpace($env:OLLAMA_MODEL)) { "qwen3:0.6b" } else { $env:OLLAMA_MODEL }
 $dashboardPort = 8501
 $dashboardPortConfigError = $false
+$audioAlarmRequired = $true
 if (-not [string]::IsNullOrWhiteSpace($env:LD6002C_DASHBOARD_PORT)) {
     $parsedPort = 0
     if (
@@ -24,6 +25,7 @@ if (-not [string]::IsNullOrWhiteSpace($env:LD6002C_DASHBOARD_PORT)) {
         $dashboardPortConfigError = $true
     }
 }
+$audioAlarmRequired = Get-BooleanEnvironmentSetting "AUDIO_ALARM_ENABLED" $true
 $script:errorCount = 0
 $script:warningCount = 0
 
@@ -160,12 +162,27 @@ if (Test-Path -LiteralPath $pythonExe -PathType Leaf) {
     }
 }
 
-$ffplayExe = Get-FfplayExecutable $repoRoot
-if ([string]::IsNullOrWhiteSpace($ffplayExe)) {
-    Report-Warn "ffplay.exe not found; startup will disable audio alarm."
+$bundledFfplayExe = Get-BundledFfplayExecutable $repoRoot
+if ([string]::IsNullOrWhiteSpace($bundledFfplayExe)) {
+    if ($audioAlarmRequired) {
+        Report-Error "Bundled FFplay is missing: runtime\ffmpeg\bin\ffplay.exe"
+    }
+    else {
+        Report-Warn "Bundled FFplay is missing, but audio alarm is disabled by configuration."
+    }
+}
+elseif (-not (Test-FfplayExecutable $bundledFfplayExe)) {
+    if ($audioAlarmRequired) {
+        Report-Error ("Bundled FFplay cannot start: {0}" -f $bundledFfplayExe)
+    }
+    else {
+        Report-Warn ("Bundled FFplay cannot start: {0}" -f $bundledFfplayExe)
+    }
 }
 else {
-    Report-Ok ("ffplay: {0}" -f $ffplayExe)
+    Report-Ok "FFplay: BUNDLED"
+    Write-Host ("      {0}" -f $bundledFfplayExe)
+    Report-Ok "ffplay.exe -version"
 }
 
 $dashboardPath = Join-Path $repoRoot "dashboard\app.py"

@@ -292,6 +292,51 @@ function Get-FfplayExecutable {
     return $null
 }
 
+function Get-BundledFfplayExecutable {
+    param([string]$RepoRoot)
+    $candidate = Join-Path $RepoRoot "runtime\ffmpeg\bin\ffplay.exe"
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        return $candidate
+    }
+    return $null
+}
+
+function Test-FfplayExecutable {
+    param([string]$Executable)
+    if ([string]::IsNullOrWhiteSpace($Executable) -or -not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
+        return $false
+    }
+    try {
+        & $Executable -version *> $null
+        return ($LASTEXITCODE -eq 0)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Add-FfplayToProcessPath {
+    param([string]$Executable)
+    $ffplayDirectory = Split-Path -Parent $Executable
+    $env:PATH = $ffplayDirectory + ";" + $env:PATH
+}
+
+function Get-BooleanEnvironmentSetting {
+    param(
+        [string]$Name,
+        [bool]$Default
+    )
+    $raw = [Environment]::GetEnvironmentVariable($Name)
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return $Default
+    }
+    switch ($raw.Trim().ToLowerInvariant()) {
+        { $_ -in @("1", "true", "yes", "on") } { return $true }
+        { $_ -in @("0", "false", "no", "off") } { return $false }
+        default { throw ("Invalid {0}: {1}. Expected true or false." -f $Name, $raw) }
+    }
+}
+
 function ConvertTo-QuotedArgument {
     param([string]$Value)
     return '"' + $Value.Replace('"', '\"') + '"'

@@ -112,6 +112,7 @@ function Merge-ModelStore {
 
 try {
     Set-Location -LiteralPath $repoRoot
+    $audioAlarmRequired = Get-BooleanEnvironmentSetting "AUDIO_ALARM_ENABLED" $true
     try {
         $ollamaUri = [Uri]$ollamaBaseUrl
     }
@@ -128,14 +129,14 @@ try {
     Write-Host " LD6002C Windows Offline Installation" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
 
-    Write-Step 1 7 "Checking Python 3.14 x64..."
+    Write-Step 1 8 "Checking Python 3.14 x64..."
     $pythonRuntime = Get-Python314Runtime
     if ($null -eq $pythonRuntime) {
         throw "Python 3.14 x64 is required. Install it before running this offline installer."
     }
     Write-Ok ("Python {0}.{1}.{2} x64: {3}" -f $pythonRuntime.Info.major, $pythonRuntime.Info.minor, $pythonRuntime.Info.micro, $pythonRuntime.Info.executable)
 
-    Write-Step 2 7 "Preparing the project virtual environment..."
+    Write-Step 2 8 "Preparing the project virtual environment..."
     if ($Repair -and (Test-Path -LiteralPath $venvDirectory)) {
         Write-Warn "Repair requested; removing the existing project .venv"
         Remove-Item -LiteralPath $venvDirectory -Recurse -Force
@@ -161,7 +162,7 @@ try {
         Write-Ok "Virtual environment created"
     }
 
-    Write-Step 3 7 "Installing Python packages from the offline wheel directories..."
+    Write-Step 3 8 "Installing Python packages from the offline wheel directories..."
     if (-not (Test-Path -LiteralPath $wheelhouse -PathType Container)) {
         throw ("Offline wheelhouse is missing: {0}" -f $wheelhouse)
     }
@@ -187,7 +188,7 @@ try {
     }
     Write-Ok "Python dependencies and project package"
 
-    Write-Step 4 7 "Validating the Python installation..."
+    Write-Step 4 8 "Validating the Python installation..."
     & $venvPython -m pip check
     if ($LASTEXITCODE -ne 0) {
         throw "pip check reported a broken or conflicting Python dependency."
@@ -198,7 +199,26 @@ try {
     }
     Write-Ok "pip check and project imports"
 
-    Write-Step 5 7 "Checking Ollama and the packaged model..."
+    Write-Step 5 8 "Checking the bundled FFplay runtime..."
+    $bundledFfplayExe = Get-BundledFfplayExecutable $repoRoot
+    if ([string]::IsNullOrWhiteSpace($bundledFfplayExe)) {
+        if ($audioAlarmRequired) {
+            throw "Bundled FFplay is required but missing: runtime\ffmpeg\bin\ffplay.exe"
+        }
+        Write-Warn "Bundled FFplay is missing, but audio alarm is disabled by configuration."
+    }
+    elseif (-not (Test-FfplayExecutable $bundledFfplayExe)) {
+        if ($audioAlarmRequired) {
+            throw ("Bundled FFplay cannot start with -version: {0}" -f $bundledFfplayExe)
+        }
+        Write-Warn ("Bundled FFplay cannot start: {0}" -f $bundledFfplayExe)
+    }
+    else {
+        Write-Ok "FFplay: BUNDLED"
+        Write-Host ("      {0}" -f $bundledFfplayExe)
+    }
+
+    Write-Step 6 8 "Checking Ollama and the packaged model..."
     $ollamaExe = Get-OllamaExecutable $repoRoot
     if ([string]::IsNullOrWhiteSpace($ollamaExe)) {
         throw "Ollama is not installed. Install Ollama Windows before running this installer."
@@ -210,7 +230,7 @@ try {
     }
     Write-Ok ("Packaged model {0}" -f $ollamaModel)
 
-    Write-Step 6 7 "Installing the offline Ollama model..."
+    Write-Step 7 8 "Installing the offline Ollama model..."
     $targetModelStore = Get-OllamaModelStore
     if ([string]::IsNullOrWhiteSpace($targetModelStore)) {
         throw "Cannot determine the Ollama model store. Set OLLAMA_MODELS or USERPROFILE."
@@ -234,7 +254,7 @@ try {
         Write-Ok ("Offline model files installed: {0}" -f $ollamaModel)
     }
 
-    Write-Step 7 7 "Verifying the model through Ollama..."
+    Write-Step 8 8 "Verifying the model through Ollama..."
     $tags = Get-OllamaTags $ollamaBaseUrl
     if ($null -eq $tags) {
         if ($ollamaBaseUrl -ne "http://127.0.0.1:11434" -and $ollamaBaseUrl -ne "http://localhost:11434") {

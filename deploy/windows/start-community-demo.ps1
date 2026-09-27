@@ -18,6 +18,7 @@ try {
     $ollamaBaseUrl = if ([string]::IsNullOrWhiteSpace($env:OLLAMA_BASE_URL)) { "http://127.0.0.1:11434" } else { $env:OLLAMA_BASE_URL.TrimEnd('/') }
     $ollamaModel = if ([string]::IsNullOrWhiteSpace($env:OLLAMA_MODEL)) { "qwen3:0.6b" } else { $env:OLLAMA_MODEL }
     $alarmVolume = if ([string]::IsNullOrWhiteSpace($env:ALARM_VOLUME)) { 100 } else { [int]$env:ALARM_VOLUME }
+    $audioAlarmEnabled = Get-BooleanEnvironmentSetting "AUDIO_ALARM_ENABLED" $true
 
     Write-Step 1 3 "Checking offline Python environment..."
     if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
@@ -62,13 +63,20 @@ try {
     Write-Ok "Ollama and model $ollamaModel"
 
     $ffplayExe = Get-FfplayExecutable $repoRoot
-    $audioArgs = @("--audio-alarm")
-    if ([string]::IsNullOrWhiteSpace($ffplayExe)) {
+    $audioArgs = @("--no-audio-alarm")
+    if (-not $audioAlarmEnabled) {
+        Write-Warn "Audio alarm is disabled by AUDIO_ALARM_ENABLED."
+    }
+    elseif ([string]::IsNullOrWhiteSpace($ffplayExe)) {
         Write-Warn "ffplay.exe not found; the demo will use console alarm output."
-        $audioArgs = @("--no-audio-alarm")
+    }
+    elseif (-not (Test-FfplayExecutable $ffplayExe)) {
+        Write-Warn ("ffplay.exe cannot start; the demo will use console alarm output: {0}" -f $ffplayExe)
     }
     else {
-        $env:PATH = (Split-Path -Parent $ffplayExe) + ";" + $env:PATH
+        Add-FfplayToProcessPath $ffplayExe
+        $audioArgs = @("--audio-alarm")
+        Write-Ok ("FFplay ready: {0}" -f $ffplayExe)
     }
 
     Write-Step 3 3 "Starting the community dashboard and mobile control page..."

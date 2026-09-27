@@ -24,6 +24,7 @@ def test_windows_entrypoints_and_runtime_scripts_exist() -> None:
         WINDOWS_DIR / "common.ps1",
         WINDOWS_DIR / "config.example.cmd",
         WINDOWS_DIR / "README.md",
+        ROOT / "runtime" / "ffmpeg" / "README.md",
     )
 
     assert all(path.is_file() for path in expected)
@@ -110,10 +111,57 @@ def test_windows_community_demo_uses_offline_environment_and_local_model() -> No
     assert "pip install" not in script.casefold()
 
 
+def test_windows_launchers_use_bundled_ffplay_without_persistent_path_changes() -> None:
+    common = (WINDOWS_DIR / "common.ps1").read_text(encoding="utf-8")
+    service = (WINDOWS_DIR / "start.ps1").read_text(encoding="utf-8")
+    community = (WINDOWS_DIR / "start-community-demo.ps1").read_text(
+        encoding="utf-8"
+    )
+    combined = "\n".join((common, service, community))
+
+    assert 'Join-Path $RepoRoot "runtime\\ffmpeg\\bin\\ffplay.exe"' in common
+    assert "Test-FfplayExecutable $ffplayExe" in service
+    assert "Test-FfplayExecutable $ffplayExe" in community
+    assert "Add-FfplayToProcessPath $ffplayExe" in service
+    assert "Add-FfplayToProcessPath $ffplayExe" in community
+    assert '$env:PATH = $ffplayDirectory + ";" + $env:PATH' in common
+    assert "SetEnvironmentVariable(\"PATH\"" not in combined
+    assert "setx " not in combined.casefold()
+
+
+def test_windows_checks_execute_bundled_ffplay_version() -> None:
+    common = (WINDOWS_DIR / "common.ps1").read_text(encoding="utf-8")
+    doctor = (WINDOWS_DIR / "doctor.ps1").read_text(encoding="utf-8")
+    installer = (WINDOWS_DIR / "install-offline.ps1").read_text(encoding="utf-8")
+
+    assert "function Get-BundledFfplayExecutable" in common
+    assert "function Test-FfplayExecutable" in common
+    assert "& $Executable -version" in common
+    assert "Get-BundledFfplayExecutable $repoRoot" in doctor
+    assert 'Report-Ok "FFplay: BUNDLED"' in doctor
+    assert 'Report-Ok "ffplay.exe -version"' in doctor
+    assert "Get-BundledFfplayExecutable $repoRoot" in installer
+    assert 'Write-Ok "FFplay: BUNDLED"' in installer
+    assert "Bundled FFplay is required but missing" in installer
+
+
+def test_ffmpeg_runtime_is_builder_supplied_not_a_wheelhouse_dependency() -> None:
+    installer = (WINDOWS_DIR / "install-offline.ps1").read_text(encoding="utf-8")
+    runtime_readme = (ROOT / "runtime" / "ffmpeg" / "README.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "runtime\\ffmpeg\\bin\\ffplay.exe" in installer
+    assert "wheelhouse\\ffmpeg" not in installer.casefold()
+    assert "does not download ffmpeg" in runtime_readme.casefold()
+    assert "wheelhouse" in runtime_readme.casefold()
+
+
 def test_large_offline_payloads_are_not_tracked_by_default() -> None:
     ignore_rules = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
 
     assert "models/" in ignore_rules
+    assert "runtime/ffmpeg/bin/" in ignore_rules
 
 
 def test_requirements_reference_has_no_builder_absolute_path() -> None:
@@ -158,7 +206,9 @@ def test_project_wheel_matches_current_windows_runtime_contract() -> None:
     assert "ld6002c_fall/community/controller.py" in names
     assert "ld6002c_fall/community/state_store.py" in names
     assert "ld6002c_fall/community/telemetry.py" in names
+    assert "ld6002c_fall/community/runtime.py" in names
     assert "ld6002c_fall/community_demo.py" in names
+    assert "ld6002c_fall/voice_announcement.py" in names
 
 
 def test_service_runner_uses_the_existing_cli_and_mock_fallback() -> None:

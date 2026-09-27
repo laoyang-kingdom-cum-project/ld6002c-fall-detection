@@ -96,6 +96,7 @@ try {
     $dashboardPort = Get-IntegerSetting "LD6002C_DASHBOARD_PORT" 8501 1 65535
     $baudrate = Get-IntegerSetting "LD6002C_BAUDRATE" 115200 1 4000000
     $alarmVolume = Get-IntegerSetting "ALARM_VOLUME" 100 0 100
+    $audioAlarmConfigured = Get-BooleanEnvironmentSetting "AUDIO_ALARM_ENABLED" $true
     $ollamaBaseUrl = if ([string]::IsNullOrWhiteSpace($env:OLLAMA_BASE_URL)) { "http://127.0.0.1:11434" } else { $env:OLLAMA_BASE_URL.TrimEnd('/') }
     $ollamaModel = if ([string]::IsNullOrWhiteSpace($env:OLLAMA_MODEL)) { "qwen3:0.6b" } else { $env:OLLAMA_MODEL }
     $dashboardUrl = "http://127.0.0.1:$dashboardPort"
@@ -231,15 +232,20 @@ try {
     }
 
     $ffplayExe = Get-FfplayExecutable $repoRoot
-    $audioEnabled = $true
-    if ([string]::IsNullOrWhiteSpace($ffplayExe)) {
-        $audioEnabled = $false
+    $audioEnabled = $false
+    if (-not $audioAlarmConfigured) {
+        Write-Warn "Audio alarm is disabled by AUDIO_ALARM_ENABLED."
+    }
+    elseif ([string]::IsNullOrWhiteSpace($ffplayExe)) {
         Write-Warn "ffplay.exe not found; audio alarm will be disabled."
     }
+    elseif (-not (Test-FfplayExecutable $ffplayExe)) {
+        Write-Warn ("ffplay.exe cannot start; audio alarm will be disabled: {0}" -f $ffplayExe)
+    }
     else {
-        $ffplayDirectory = Split-Path -Parent $ffplayExe
-        $env:PATH = $ffplayDirectory + ";" + $env:PATH
-        Write-Ok "Audio alarm ready"
+        Add-FfplayToProcessPath $ffplayExe
+        $audioEnabled = $true
+        Write-Ok ("Audio alarm ready: {0}" -f $ffplayExe)
     }
 
     if (Test-TcpPort -Port $dashboardPort) {

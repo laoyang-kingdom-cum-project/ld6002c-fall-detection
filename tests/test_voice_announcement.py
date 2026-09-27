@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import time
 from types import SimpleNamespace
 
 import ld6002c_fall.voice_announcement as voice_module
@@ -51,6 +52,47 @@ def test_windows_voice_uses_non_blocking_encoded_powershell_command() -> None:
     assert "GetInstalledVoices" in script
     assert "当前监护状态" not in command[-1]
     assert kwargs["stdout"] is not None
+
+
+def test_windows_voice_delay_is_inside_non_blocking_powershell_process() -> None:
+    calls: list[list[str]] = []
+
+    def process_factory(command: list[str], **_kwargs: object):
+        calls.append(command)
+        return object()
+
+    output = WindowsSpeechAnnouncement(
+        powershell="powershell.exe",
+        process_factory=process_factory,
+        verify=False,
+    )
+
+    started = time.perf_counter()
+    assert output.announce("检测到跌倒，请立即处理。", delay_ms=800) is True
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.1
+    script = base64.b64decode(calls[0][-1]).decode("utf-16le")
+    assert "Start-Sleep -Milliseconds 800;" in script
+    assert script.index("Start-Sleep -Milliseconds 800;") < script.index(
+        "$speaker.Speak($text)"
+    )
+
+
+def test_windows_voice_process_failure_falls_back_to_console(capsys) -> None:
+    def process_factory(_command: list[str], **_kwargs: object):
+        raise OSError("powershell launch failed")
+
+    output = WindowsSpeechAnnouncement(
+        powershell="powershell.exe",
+        process_factory=process_factory,
+        verify=False,
+    )
+
+    assert output.announce("检测到跌倒，请立即处理。", delay_ms=800) is False
+    captured = capsys.readouterr().out
+    assert "Windows 语音启动失败" in captured
+    assert "[Voice] 检测到跌倒，请立即处理。" in captured
 
 
 def test_windows_voice_probe_requires_system_speech_and_chinese_voice() -> None:

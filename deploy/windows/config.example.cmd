@@ -13,4 +13,5 @@ set "OLLAMA_MODEL=qwen3:0.6b"
 @rem Optional runtime overrides.
 set "LD6002C_BAUDRATE=115200"
 set "LD6002C_DASHBOARD_PORT=8501"
+set "AUDIO_ALARM_ENABLED=true"
 set "ALARM_VOLUME=100"

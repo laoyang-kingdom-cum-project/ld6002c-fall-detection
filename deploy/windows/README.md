@@ -8,10 +8,10 @@
 
 1. 安装 Python 3.14 x64。安装器会拒绝 32 位或其他 Python 版本。
 2. 安装 Ollama Windows；也兼容已经准备好的 `runtime\ollama\ollama.exe`。
-3. 复制完整离线交付目录，确认包含 `wheelhouse\`、`project-wheel\` 和 `models\`。
+3. 复制完整离线交付目录，确认包含 `wheelhouse\`、`project-wheel\`、`models\` 和 `runtime\ffmpeg\bin\`。
 4. 双击 `INSTALL_WINDOWS_OFFLINE.bat`，等待 `INSTALLATION COMPLETE`。
 5. 安装 Silicon Labs CP210x 驱动，连接 LD6002C 后在设备管理器确认出现 `COMx`。
-6. 可选准备 ffplay；缺少播放器时只关闭电脑声音，不影响雷达、AI、日志或大屏。
+6. 不需要在目标电脑安装 FFmpeg；`WINDOWS_CHECK.bat` 会实际执行 bundled `ffplay.exe -version`。
 
 不要从另一台电脑复制 `.venv`。安装器会在目标电脑创建正式 `.venv`，并用该电脑的 Python 3.14 从离线 wheel 重建环境。
 
@@ -19,7 +19,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `INSTALL_WINDOWS_OFFLINE.bat` | 首次创建 `.venv`、安装离线 Python wheel、导入并验证 `qwen3:0.6b`。 |
+| `INSTALL_WINDOWS_OFFLINE.bat` | 首次创建 `.venv`、安装离线 Python wheel、验证 bundled ffplay、导入并验证 `qwen3:0.6b`。 |
 | `START_WINDOWS.bat` | 检查环境，必要时启动本地 Ollama，选择真实雷达或 mock，启动主程序和大屏，等待页面可访问后打开浏览器。 |
 | `START_COMMUNITY_DEMO.bat` | 检查同一个 Python 3.14 `.venv`、Ollama、`qwen3:0.6b` 和 ffplay，然后在 `0.0.0.0:8501` 启动社区课堂演示。 |
 | `WINDOWS_CHECK.bat` | 只检查环境，不启动主程序、大屏或 Ollama。 |
@@ -38,6 +38,19 @@ Python 安装命令固定使用 `--no-index --find-links wheelhouse`，项目本
 安装器检查 `models\manifests\registry.ollama.ai\library\qwen3\0.6b` 及其引用的每个 blob，然后合并复制到 `OLLAMA_MODELS` 指定目录；未设置时使用 `%USERPROFILE%\.ollama\models`。复制不会使用 `/MIR`，不会删除用户原有模型。目标模型已经完整时直接跳过大文件复制。
 
 模型复制后通过本机 `/api/tags` 验证。如果 Ollama 原本未运行，安装器会临时启动 `ollama serve`，验证完成后只停止自己创建的临时进程；原本已运行的 Ollama 会直接复用且不会关闭。
+
+## Bundled FFmpeg runtime
+
+正式离线包必须由构建者手工放入完整 Windows x64 FFmpeg build：
+
+```text
+runtime\ffmpeg\bin\ffplay.exe
+runtime\ffmpeg\bin\ffmpeg.exe
+runtime\ffmpeg\bin\ffprobe.exe
+runtime\ffmpeg\bin\*.dll
+```
+
+项目不联网下载 FFmpeg，也不把它放入 Python `wheelhouse`。`INSTALL_WINDOWS_OFFLINE.bat` 和 `WINDOWS_CHECK.bat` 在 `AUDIO_ALARM_ENABLED=true` 时要求 bundled ffplay 存在并能执行 `-version`。`START_WINDOWS.bat` 与 `START_COMMUNITY_DEMO.bat` 只修改当前 launcher process 的 `PATH`；关闭启动窗口后该修改自然消失，不会写入系统或用户环境变量。
 
 如果 `.venv` 损坏或版本不正确，在命令提示符运行：
 
@@ -85,6 +98,7 @@ set "LD6002C_PORT=COM5"
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama API 地址。 |
 | `OLLAMA_MODEL` | `qwen3:0.6b` | 必须已经离线存在的模型名。 |
 | `OLLAMA_MODELS` | `%USERPROFILE%\.ollama\models` | 可选的自定义 Ollama 模型仓库；示例配置默认保持注释。 |
+| `AUDIO_ALARM_ENABLED` | `true` | 正式交付是否要求 ffplay 紧急报警；为 `true` 时安装检查要求 bundled ffplay 可启动。 |
 | `ALARM_VOLUME` | `100` | ffplay 播放音量，范围 0～100。 |
 
 ## 运行状态与停止
@@ -118,7 +132,7 @@ data/windows-runtime/
 
 ### 找不到 ffplay
 
-这只会禁用电脑语音。雷达、AI、CSV、控制台报警和 Dashboard 仍会启动。
+检查离线包是否完整包含 `runtime\ffmpeg\bin\ffplay.exe`、同 build 的 DLL、`ffmpeg.exe` 和 `ffprobe.exe`。运行 `WINDOWS_CHECK.bat` 查看 `FFplay: BUNDLED` 及实际路径；不需要单独安装 FFmpeg 或永久修改 PATH。
 
 ### 模型缺失
 
@@ -126,4 +140,4 @@ data/windows-runtime/
 
 ## 验证边界
 
-普通 Git 仓库忽略大型 `models/`；制作 U 盘交付目录时必须另外放入真实模型，并确认仓库中的 `wheelhouse/` 和 `project-wheel/` 一并复制。当前脚本在 Linux 开发环境中执行 pytest 和静态检查，仍需在断网的 Windows 10/11 x64 + Python 3.14 真机验证：删除 `.venv` 后首次安装、模型大文件复制、Ollama 识别、CP2104 COM、ffplay，以及重复启动和停止后的进程行为。
+普通 Git 仓库忽略大型 `models/` 和 `runtime/ffmpeg/bin/`；制作 U 盘交付目录时必须另外放入真实模型和完整 FFmpeg Windows x64 runtime，并确认仓库中的 `wheelhouse/` 和 `project-wheel/` 一并复制。当前脚本在 Linux 开发环境中执行 pytest 和静态检查，仍需在断网的 Windows 10/11 x64 + Python 3.14 真机验证：删除 `.venv` 后首次安装、模型大文件复制、Ollama 识别、CP2104 COM、bundled ffplay、系统中文 voice，以及重复启动和停止后的进程行为。

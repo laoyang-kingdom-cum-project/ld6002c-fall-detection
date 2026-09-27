@@ -543,12 +543,15 @@ class CommunityDemoRuntime:
                 timestamp,
                 source=event_source,
             )
-        if requested.voice_announcement_requested and scenario != "FALL":
+        if requested.voice_announcement_requested and (
+            scenario != "FALL" or entering_fall
+        ):
             self._announce_scenario(
                 requested.resident_id,
                 scenario,
                 timestamp,
                 source=source,
+                delay_ms=800 if scenario == "FALL" else 0,
             )
         if response_mode == "DIRECT" and scenario not in {"OFFLINE", "BEND"}:
             self._log_simulated_ai_trace(
@@ -567,17 +570,19 @@ class CommunityDemoRuntime:
         timestamp: datetime,
         *,
         source: str,
+        delay_ms: int = 0,
     ) -> None:
         text = {
             "BEND": "检测到弯腰姿态，请注意安全。",
             "WARNING": "检测到疑似异常姿态，请注意观察。",
             "OFFLINE": "监护设备已离线，请检查设备连接。",
             "NORMAL": "当前监护状态已恢复正常。",
+            "FALL": "检测到跌倒，请立即处理。",
         }.get(scenario)
         if text is None:
             return
         try:
-            success = self.voice_announcement.announce(text)
+            success = self.voice_announcement.announce(text, delay_ms=delay_ms)
         except Exception as exc:
             success = False
             print(f"[Voice] 状态语音播报失败：{exc}")
@@ -589,6 +594,7 @@ class CommunityDemoRuntime:
                 "success": success,
                 "backend": self.voice_announcement.backend,
                 "source": source,
+                "delay_ms": delay_ms,
             },
             ensure_ascii=False,
         )
@@ -596,7 +602,13 @@ class CommunityDemoRuntime:
             resident_id,
             "VOICE_ANNOUNCEMENT",
             timestamp,
-            "DISCONNECTED" if scenario == "OFFLINE" else "NORMAL",
+            (
+                "DISCONNECTED"
+                if scenario == "OFFLINE"
+                else "CONFIRMED_FALL"
+                if scenario == "FALL"
+                else "NORMAL"
+            ),
             details,
             source=source,
         )

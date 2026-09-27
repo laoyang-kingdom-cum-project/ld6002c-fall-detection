@@ -36,7 +36,7 @@
 | 无设备模拟 | `mock` 模式不需要雷达、串口驱动或 StickS3。仅验证状态机和页面时，可关闭 AI 和音频报警。 |
 | 真实雷达 | HLK-LD6002C、配套测试底板、支持数据传输的 USB/Type-C 线；系统需识别 USB-UART 串口，本机底板使用 CP2104。当前用户必须具有串口读写权限，且串口不能同时被其他采集程序占用。 |
 | 本地 AI | 单独安装并启动 Ollama，准备 `qwen3:0.6b` 模型；默认服务地址为 `http://127.0.0.1:11434`。Python 安装命令不会安装 Ollama 或下载模型；不使用 AI 时传入 `--disable-ai`。 |
-| 电脑语音 | 单独安装带 `ffplay` 的 FFmpeg，并确保 `ffplay` 在 `PATH` 中；需要可用的扬声器或耳机，以及项目中的报警音频文件。不播放声音时传入 `--disable-audio-alarm`。 |
+| 电脑声音 | Windows 最终离线包自带 `runtime\ffmpeg\bin\ffplay.exe`，目标电脑无需安装 FFmpeg；其他系统需提供可执行的 `ffplay`。需要可用的扬声器或耳机以及项目报警音频。不播放声音时传入 `--disable-audio-alarm`。 |
 | 原始数据回放 | `replay` 模式需要已采集的 `.bin` 文件，不需要连接雷达。 |
 
 AI 模型需要额外的内存、磁盘空间和推理时间，项目尚未做最低内存或显卡配置基准测试。演示前应在目标电脑上确认模型能够加载、响应时间符合配置的 `--ollama-timeout`，避免只根据 Python 环境安装成功判断 AI 已就绪。
@@ -105,7 +105,7 @@ ld6002c-fall --mode mock --enable-ai --ollama-model fall-detection-ai
 
 ## 安装
 
-在项目根目录执行以下命令，按自己的 shell 选择一组。Ollama 和 FFmpeg 属于系统工具，需要按上面的功能要求单独准备。
+在项目根目录执行以下命令，按自己的 shell 选择一组。Ollama 需要按上面的功能要求准备；Windows 最终离线包使用项目自带 FFmpeg runtime，其他系统自行提供 `ffplay`。
 
 fish shell：
 
@@ -152,7 +152,10 @@ Windows 10/11 x64 录课电脑只需事先安装 **Python 3.14 x64** 和 **Ollam
 wheelhouse/       Windows CPython 3.14 第三方依赖 wheel
 project-wheel/    ld6002c_fall_detection-*.whl
 models/           另行加入的 qwen3:0.6b Ollama manifests 和 blobs
+runtime/ffmpeg/    构建者另行加入的完整 Windows x64 FFmpeg runtime
 ```
+
+`runtime\ffmpeg\bin` 必须包含 `ffplay.exe`、`ffmpeg.exe`、`ffprobe.exe` 和所选 FFmpeg build 需要的 DLL。FFmpeg 不进入 `wheelhouse`，项目也不会联网下载；离线包构建者应手工放入完整 Windows x64 build。目标电脑无需单独安装 FFmpeg，也无需永久修改系统 `PATH`。
 
 第一次部署：
 
@@ -176,7 +179,7 @@ STOP_WINDOWS.bat              只停止本项目启动的进程
 
 安装器只接受 Python 3.14 x64，只从 `wheelhouse/` 和 `project-wheel/` 安装，使用 `--no-index` 禁止访问包索引；模型安全合并到 `OLLAMA_MODELS` 或 `%USERPROFILE%\.ollama\models`，不会删除已有模型。若 `.venv` 损坏，可在命令提示符运行 `INSTALL_WINDOWS_OFFLINE.bat -Repair` 重建。
 
-`START_WINDOWS.bat` 会检查项目 `.venv`、必要时启动 Ollama、确认模型、识别 CP210x/CP2104 对应的 `COMx`，随后启动雷达服务和 AI Live Monitor；页面可访问后才打开浏览器。若没有真实雷达，可输入 `M` 切换 Mock Fall Demo。ffplay 缺失只会禁用电脑语音。
+`START_WINDOWS.bat` 会检查项目 `.venv`、必要时启动 Ollama、确认模型、识别 CP210x/CP2104 对应的 `COMx`，随后启动雷达服务和 AI Live Monitor；页面可访问后才打开浏览器。若没有真实雷达，可输入 `M` 切换 Mock Fall Demo。启动器只在当前进程及其子进程中临时 prepend FFmpeg 目录，不写入系统或用户 `PATH`。
 
 所有 Windows 脚本都不会执行在线安装、模型下载或永久修改 ExecutionPolicy / 系统 PATH。固定 COM 口、模型仓库或服务端口时，可复制 `deploy\windows\config.example.cmd` 为 `config.cmd`。完整准备方法、模型验证、停止规则和故障排查见 [Windows 部署说明](deploy/windows/README.md)。
 
@@ -210,7 +213,7 @@ AI 模式使用 `http://127.0.0.1:11434` 的 `qwen3:0.6b`；如 Ollama 不可用
 ld6002c-community-demo --reset
 ```
 
-Windows 离线部署完成后可直接双击 `START_COMMUNITY_DEMO.bat`，它使用同一个 Python 3.14 `.venv`、离线 wheel、Ollama 模型和 ffplay，不会在现场执行 `pip install` 或 `ollama pull`。
+Windows 离线部署完成后可直接双击 `START_COMMUNITY_DEMO.bat`，它使用同一个 Python 3.14 `.venv`、离线 wheel、Ollama 模型和 `runtime\ffmpeg\bin\ffplay.exe`，不会在现场执行 `pip install`、`ollama pull` 或 FFmpeg 下载。
 
 以下流程假设已经完成安装。每个终端先进入同一项目根目录，并按上面的 shell 说明激活 `.venv`。**真实监测与 mock 演示二选一运行**，避免多个主程序同时写入默认日志；Streamlit 大屏在另一个终端独立启动。
 
@@ -235,7 +238,7 @@ ollama pull qwen3:0.6b
 ollama list
 ```
 
-要使用电脑语音，确认以下命令成功，并检查扬声器/耳机和系统音量：
+Windows 离线交付运行 `WINDOWS_CHECK.bat` 验证 bundled ffplay；其他系统确认以下命令成功，并检查扬声器/耳机和系统音量：
 
 ```bash
 ffplay -version
@@ -314,7 +317,7 @@ python -m streamlit run dashboard/app.py --server.port 8501
 
 “模拟弯腰”是 **DEMO ONLY / SIMULATED POSTURE EVENT**。当前 LD6002C 协议路径没有提供项目可直接使用的弯腰判定字段，因此 `BEND` 仅由 Community Demo Runtime 生成教学点云和姿态事件，不会标记为 LD6002C 原生能力或 Qwen 真实判断。它保持 `status=NORMAL`、`posture_event=BEND`、`radar_result=0`、`ai_result=0`，即使控制台选择“AI完整链路”也不调用 Ollama，不计入当前报警或今日报警。
 
-跌倒紧急报警与状态语音是两条独立输出链。`FALL` 仍只使用原有 `AlarmOutput` / `DesktopAudioAlarm` / `ffplay` 播放报警音；控制台的“状态语音播报”默认关闭，开启后只在 BEND、WARNING、OFFLINE、NORMAL/RECOVER 的请求版本被 runtime 真正应用时播报一次，不会在遥测 tick 中重复。Windows 使用本机 PowerShell `System.Speech` 非阻塞启动，不增加 Python 依赖；后端不可用时仅输出 `[Voice] ...` 控制台文本，不会阻断状态迁移或跌倒报警。“确认报警”和“恢复正常”仍会关闭当前跌倒报警音；后者还会清除真实住户的演示覆盖。
+跌倒紧急报警与状态语音是两条独立输出链。`FALL` 始终保留原有 `AlarmOutput` / `DesktopAudioAlarm` / `ffplay` 紧急报警音；控制台的“状态语音播报”默认关闭，关闭时 FALL 行为不变。开启后，进入 FALL 的状态边沿会额外非阻塞调度“检测到跌倒，请立即处理。”，PowerShell 子进程延迟约 800 ms 后播报；BEND、WARNING、OFFLINE、NORMAL/RECOVER 仍立即播报。维持 FALL 的遥测 tick 或重复请求同一 FALL 状态不会重复报警或重复语音。Windows 使用本机 PowerShell `System.Speech`，不增加 Python 依赖；后端不可用时仅输出 `[Voice] ...` 控制台文本，不会阻断 ffplay 报警、状态迁移或遥测。“确认报警”和“恢复正常”仍会关闭当前跌倒报警音；后者还会清除真实住户的演示覆盖。
 
 首次启动会自动生成 `data/community_state.json`，并将所有住户初始化为 `NORMAL`；`data/community_runtime.json` 保存 heartbeat、Ollama、模型、AI 模式、遥测和报警 health。状态和遥测使用锁文件与同目录临时文件原子替换，避免 Streamlit 刷新时读到半份数据。社区事件写入 `data/community_events.csv`；分住户技术帧与 AI/报警事件写入 `data/community_telemetry/<resident>.csv` 和 `<resident>.events.csv`。可通过 `COMMUNITY_TELEMETRY_INTERVAL`、`COMMUNITY_TELEMETRY_MAX_FRAMES` 和 `REAL_TELEMETRY_STALE_SECONDS` 调整默认的 0.5 秒、60 帧和 5 秒阈值。
 
@@ -445,7 +448,7 @@ ld6002c-fall --mode replay \
 
 确认跌倒后，`DesktopAudioAlarm` 会在控制台输出报警，并通过本机 `ffplay` 非阻塞播放项目根目录的 `studio_video_1778294323944.mp3`。该文件实际为 M4A/MP4 容器，`ffplay` 会根据内容自动识别。
 
-需要本机安装 FFmpeg：
+Windows 离线包从 `runtime\ffmpeg\bin` 自动使用项目自带 FFmpeg；Linux/macOS 开发环境可用系统安装的 `ffplay`：
 
 ```fish
 ffplay -version

@@ -24,6 +24,9 @@ dist/
 # Ollama model blobs belong to the USB/offline bundle, not normal Git history.
 models/
 
+# FFmpeg Windows binaries are added by the offline bundle builder.
+runtime/ffmpeg/bin/
+
 .DS_Store
 .idea/
 .vscode/

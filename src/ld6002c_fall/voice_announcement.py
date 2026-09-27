@@ -1,4 +1,4 @@
-"""Optional non-blocking status announcements, separate from fall alarms."""
+"""Optional non-blocking speech, separate from emergency fall alarms."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Protocol
 
 
 class VoiceAnnouncementOutput(Protocol):
-    """Output boundary for optional non-emergency status speech."""
+    """Output boundary for speech that supplements, but never replaces, alarms."""
 
     @property
     def ready(self) -> bool: ...
@@ -19,7 +19,7 @@ class VoiceAnnouncementOutput(Protocol):
     @property
     def backend(self) -> str: ...
 
-    def announce(self, text: str) -> bool: ...
+    def announce(self, text: str, *, delay_ms: int = 0) -> bool: ...
 
     def close(self) -> None: ...
 
@@ -48,7 +48,8 @@ class ConsoleVoiceAnnouncement:
     def backend(self) -> str:
         return "console"
 
-    def announce(self, text: str) -> bool:
+    def announce(self, text: str, *, delay_ms: int = 0) -> bool:
+        del delay_ms
         print(f"[Voice] {text}")
         return False
 
@@ -92,11 +93,16 @@ class WindowsSpeechAnnouncement:
     def backend(self) -> str:
         return "windows-system-speech"
 
-    def announce(self, text: str) -> bool:
+    def announce(self, text: str, *, delay_ms: int = 0) -> bool:
+        if delay_ms < 0:
+            raise ValueError("delay_ms must be greater than or equal to 0")
         if not self.ready or self.powershell is None:
             print(f"[Voice] {text}")
             return False
         encoded_text = base64.b64encode(text.encode("utf-8")).decode("ascii")
+        delay_script = (
+            f"Start-Sleep -Milliseconds {delay_ms};" if delay_ms > 0 else ""
+        )
         script = (
             "$ErrorActionPreference='Stop';"
             "Add-Type -AssemblyName System.Speech;"
@@ -108,6 +114,7 @@ class WindowsSpeechAnnouncement:
             "$speaker.SelectVoice($voice.VoiceInfo.Name);"
             "$text=[System.Text.Encoding]::UTF8.GetString("
             f"[System.Convert]::FromBase64String('{encoded_text}'));"
+            f"{delay_script}"
             "$speaker.Speak($text);$speaker.Dispose();"
         )
         command = _powershell_command(self.powershell, script)
